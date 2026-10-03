@@ -1,0 +1,6 @@
+.env
+!demo/workspace/.env
+.DS_Store
+/proxy/bin/
+node_modules/
+dist/
