@@ -11,12 +11,14 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/audit"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/budget"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/forward"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/policy"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/review"
+	"github.com/Mikformatycy/goldman-sachs/proxy/internal/scan"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/vault"
 )
 
@@ -29,6 +31,8 @@ type API struct {
 	Vault        *vault.Vault
 	Policy       *policy.Policy
 	Reviews      *review.Store
+	Scans        *scan.Store
+	InjectionAt  float64 // alert threshold for scan results
 	TokenLimit   int64
 	Nodes        []forward.Node
 }
@@ -65,6 +69,8 @@ func (a *API) Handler() http.Handler {
 	advisor := http.NewServeMux()
 	advisor.HandleFunc("GET /api/reviews", a.reviews)
 	advisor.HandleFunc("POST /api/reviews/{id}/suggestion", a.suggest)
+	advisor.HandleFunc("GET /api/scans", a.scans)
+	advisor.HandleFunc("POST /api/scans/{id}/result", a.scanResult)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got := []byte(r.Header.Get("Authorization"))
@@ -113,6 +119,38 @@ func (a *API) suggest(w http.ResponseWriter, r *http.Request) {
 	a.Audit.Record(audit.Event{Agent: "ai-advisor", Kind: "suggestion", Tool: it.Subject, Action: sg.Value,
 		Reason: reason})
 	writeJSON(w, it)
+}
+
+func (a *API) scans(w http.ResponseWriter, r *http.Request) {
+	if a.Scans == nil {
+		writeJSON(w, []scan.Item{})
+		return
+	}
+	writeJSON(w, a.Scans.Pending(20))
+}
+
+// scanResult records the advisor's injection probability. Above the
+// threshold it raises an alert in the audit log; it never blocks anything.
+func (a *API) scanResult(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Injection float64 `json:"injection"`
+		Model     string  `json:"model"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&req); err != nil {
+		http.Error(w, "bad json", http.StatusBadRequest)
+		return
+	}
+	it, err := a.Scans.Resolve(r.PathValue("id"), req.Injection, req.Model)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+	if req.Injection >= a.InjectionAt {
+		a.Audit.Record(audit.Event{Agent: it.Agent, Kind: "injection", Tool: it.Source,
+			Reason: fmt.Sprintf("instructions aimed at an AI found in content the agent read (p=%.2f, %s, flagged %d ms after it arrived)",
+				req.Injection, req.Model, time.Since(it.ObservedAt).Milliseconds())})
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // decide applies (or dismisses) a review. Humans only.

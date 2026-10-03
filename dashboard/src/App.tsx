@@ -19,6 +19,13 @@ export default function App() {
   }
   const [dismissed, setDismissed] = useState<Set<number>>(new Set())
 
+  // An injection warning stays until dismissed, the agent is reset, or a kill for it supersedes it.
+  const warnings = events.filter(
+    (e) =>
+      e.kind === 'injection' &&
+      !dismissed.has(e.id) &&
+      !events.some((r) => r.kind === 'reset' && r.agent === e.agent && r.id > e.id),
+  )
   // A kill stays on screen until dismissed or the agent is reset.
   const kills = events.filter(
     (e) =>
@@ -62,6 +69,27 @@ export default function App() {
         </nav>
 
         <main className="min-w-0 flex-1 p-6">
+          {warnings.map((w) => (
+            <div key={w.id} className="mb-3 flex items-start gap-3 rounded-lg border-2 border-warn bg-[#fff8e6] px-4 py-3">
+              <span className="text-lg leading-5 text-[#8d6605]">⚠</span>
+              <div className="flex-1">
+                <p className="font-bold">
+                  Possible prompt injection reached agent "{w.agent}"
+                </p>
+                <p className="text-sm text-gray-700">
+                  <Mono>{w.tool}</Mono> {w.reason}. Early warning from the AI advisor: nothing is blocked by this alert,
+                  the policy still decides every action.
+                </p>
+              </div>
+              <button
+                aria-label="Dismiss"
+                onClick={() => setDismissed(new Set(dismissed).add(w.id))}
+                className="px-1 text-lg leading-5"
+              >
+                ×
+              </button>
+            </div>
+          ))}
           {kills.map((k) => (
             <div key={k.id} className="kill-flash mb-3 flex items-start gap-3 rounded-lg bg-bad px-4 py-3 text-white">
               <span className="text-lg leading-5">⊗</span>
