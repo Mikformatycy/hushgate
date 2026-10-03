@@ -1,65 +1,100 @@
 # Provenance Gate
 
-Deterministic API gateway between AI agents and LLM providers. See [IDEA.md](IDEA.md).
+An AI control layer that sits between AI agents and LLM providers. Every request and every tool call an agent makes goes through it, so the organization can keep secrets and personal data away from the model, stop agents from taking actions they shouldn't, catch unapproved AI use, and cap spend. A dashboard shows what happened and why.
 
-## Run
+To run it and walk through the demo scenarios, see [INSTRUCTION.md](INSTRUCTION.md).
 
-```sh
-export ANTHROPIC_API_KEY=sk-ant-...      # held by the proxy only
-docker compose up -d --build
-docker compose exec agent python agent.py                  # summarize the poisoned report
-docker compose exec agent python agent.py --egress-check   # should be blocked
-docker compose logs -f proxy                               # audit events (JSON lines)
-```
+## Problems it solves
 
-Dashboard: http://localhost:3000 (reset halted agents from the Agents page).
-
-Offline, without an API key, against a scripted fake model:
-
-```sh
-python3 demo/fake_upstream.py &
-ANTHROPIC_API_KEY=x UPSTREAM_URL=http://host.docker.internal:9999 docker compose up -d --build
-docker compose exec agent python agent.py "attack"
-```
-
-## Company network simulation
-
-Offline simulation of how a company would deploy the gate. No agent is configured to use it: the laptops call `api.anthropic.com` like normal, device management (simulated) gives them the proxy settings and the company root CA, and the gate inspects the TLS traffic.
-
-```sh
-docker compose -f docker-compose.corp.yml up -d --build   # dashboard on :3000 (DASHBOARD_PORT to change)
-docker compose -f docker-compose.corp.yml exec jdoe-macbook python laptop.py all
-docker compose -f docker-compose.corp.yml exec guest-laptop python laptop.py all
-docker compose -f docker-compose.corp.yml exec jdoe-macbook python laptop.py claude attack
-docker compose -f docker-compose.corp.yml exec jdoe-macbook python laptop.py claude "post to slack"  # unknown tool -> Review page
-```
-
-Export `TYPESAFE_API_KEY` before `up` to have the AI advisor suggest decisions on the Review page.
-
-| | `jdoe-macbook` (allowlisted) | `guest-laptop` (not registered) |
-|---|---|---|
-| `web` — normal website | allowed, not inspected further | allowed |
-| `claude` — Anthropic via the SDK's default URL | allowed; masked, policed, budgeted | blocked: unknown device |
-| `vps` — OpenAI-format model on a VPS | blocked: shadow AI | blocked: unknown device |
-| `direct` — skip the proxy | no route out | no route out |
-
-LLM traffic is recognized by its shape (paths, headers, `messages[].role` in the body), so a self-hosted model on any domain is caught. Device profiles live in `demo/corp/mdm/`, the allowlist in `demo/corp/nodes.json`.
+| Risk | What the gate does |
+|---|---|
+| Secrets and personal data sent to an LLM provider | Replaces them with placeholders before the request leaves, and restores them only for approved local tools |
+| Prompt injection turning an agent against its user | Blocks or kills tool calls that would carry secrets off the machine, and warns as soon as injected instructions reach the agent |
+| Agents calling tools they shouldn't | Every tool call is checked against a policy before the agent sees it; unknown tools are denied by default |
+| Shadow AI (unapproved models, self-hosted models, unregistered devices) | Recognizes LLM traffic by its shape on any host and allows only approved providers from allowlisted devices |
+| Runaway cost | Per-agent token budgets with a hard stop |
+| No visibility for security teams | Audit log of every decision, with the rule that made it, in a live dashboard |
 
 ## How it works
 
-- **Vault**: `.env` values are classified C0–C3 and C2+ are replaced with `{{VAULT_ENV_NAME}}` before leaving the box. Known key formats (AWS, Anthropic, GitHub, JWT, PEM, DSN passwords) are masked even if they are not in `.env`. Override a tier with `KEY=value # @class: C3`.
-- **Tool policy** (`proxy/policy.json`): every `tool_use` block is buffered until complete. `local` tools get secrets rehydrated, `network` tools carrying a vault token trip the kill switch, `deny` tools are blocked.
-- **Budgets**: per-agent token counters in Redis (`TOKEN_LIMIT`), agent picked by the `X-Agent-Id` header.
-- **Egress**: the agent sits on an `internal` Docker network; the proxy is its only reachable host.
+```mermaid
+flowchart LR
+  subgraph Company network
+    A[Agent / laptop] -->|all traffic| G
+    subgraph G[Provenance Gate]
+      V[Vault: mask secrets and PII]
+      P[Policy: check tool calls]
+      B[Budgets and kill switch]
+      D[LLM traffic detector + device allowlist]
+    end
+    G --> R[(Redis)]
+    G --> UI[Dashboard]
+    ADV[AI advisor] -->|suggestions and alerts only| G
+  end
+  G -->|masked requests| LLM[Approved LLM provider]
+  ADV -->|no secrets| JEV[TypeSafe Jev]
+  A -. direct internet: no route .-> X[Internet]
+```
 
-- **Forward proxy** (`:3128`, enabled by `CA_CERT_FILE`): decrypts TLS with the company CA, identifies the node from the proxy credentials (`NODES_FILE`), blocks LLM traffic from unknown nodes or to hosts outside `APPROVED_LLM_HOSTS`, and sends approved LLM traffic through the gateway above. Other traffic passes through.
-- **Review queue + AI advisor** (`advisor/`): cases the rules can't settle (tools missing from the policy, variables no rule recognized) wait on the Review page under the safe default. The advisor asks [TypeSafe Jev](https://docs.typesafe.ai) (a classifier with calibrated probabilities, pinned to `jev-1.13.0`) for a suggestion. It sees tool definitions and a value's *shape* (`payments-oncall` → `a8-a6`), never secret values, and its `ADVISOR_TOKEN` can post suggestions but not apply them. A person applies or overrides; enforcement stays rule-based. Needs `TYPESAFE_API_KEY`; without it the advisor idles and reviews stay manual.
-- **Injection early warning**: the gate queues what agents read (tool results, already masked) and the advisor asks Jev whether it contains instructions aimed at an AI. Above `INJECTION_ALERT_THRESHOLD` (0.8) the dashboard shows a warning, usually before the injected action happens. It never blocks: the policy still decides every action.
-- **Admin API** (`:8081`, needs `ADMIN_TOKEN`): events, agents, reset, config. The dashboard's nginx attaches the token, so the browser and the agent never see it.
+1. **Outgoing request.** The vault replaces known secrets (from `.env` files) and detected secrets and personal data (API keys, JWTs, private keys, IBAN, card numbers, PESEL, NIP) with stable placeholders like `{{VAULT_ENV_DB_PASSWORD}}`. The provider never sees the real values.
+2. **Incoming response.** Each tool call the model requests is held until complete, then checked against the policy:
+   - local tool (file write): allowed, placeholders swapped back for real values
+   - network tool (email, HTTP) carrying a credential: dropped, agent halted (kill switch)
+   - network tool carrying personal data: dropped, agent continues
+   - unknown or denied tool: dropped
+3. **Budgets.** Token usage is counted per agent in Redis; a halted or over-budget agent gets `403` until reset.
+4. **Network.** Agents have no route to the internet except through the gate. In company network mode the gate is a TLS-inspecting forward proxy, so agents need no configuration at all.
 
-## Development
+### Hybrid controls: rules decide, AI advises
+
+Enforcement is deterministic: the same input always gets the same decision, and every decision names the rule behind it. AI is used where rules can't decide, and never with the power to change anything on its own:
+
+- **Review queue.** Tools missing from the policy and variables no rule recognized stay at the safe default (denied or masked). The AI advisor asks [TypeSafe Jev](https://docs.typesafe.ai), a classifier with calibrated probabilities, for a suggestion; a person applies or overrides it on the Review page.
+- **Prompt injection early warning.** What agents read (tool results, already masked) is scored by Jev. A high score raises a dashboard alert, usually before the injected action is attempted. It never blocks.
+
+The advisor sees tool definitions and the *shape* of a variable's value (`payments-oncall` becomes `a8-a6`), never secret values. Its token can post suggestions and alerts but cannot apply them.
+
+## Controls
+
+| Control | Type | Configured in |
+|---|---|---|
+| Secret and PII masking, tiers C0–C3 | Deterministic: name rules, known formats, checksums, entropy | `demo/workspace/.env` (`# @class: C3` overrides), `MASK_FROM_TIER` |
+| Tool policy: local / network / deny | Deterministic | `proxy/policy.json` |
+| Kill switch, token budgets | Deterministic | `TOKEN_LIMIT` |
+| Device allowlist, approved LLM hosts | Deterministic | `demo/corp/nodes.json`, `APPROVED_LLM_HOSTS` |
+| LLM traffic detection on any host | Deterministic: paths, headers, body shape | built in (`proxy/internal/detect`) |
+| Egress lockdown | Network (Docker internal networks) | `docker-compose*.yml` |
+| Review suggestions | AI (Jev), advisory | `TYPESAFE_API_KEY` |
+| Prompt injection warning | AI (Jev), alert only | `TYPESAFE_API_KEY`, `INJECTION_ALERT_THRESHOLD` |
+
+## Where it can run
+
+- **Developer machines and CI, gateway mode.** Agents point at the gate (`ANTHROPIC_BASE_URL=http://gate:8080`), or a device-management profile sets it. The gate holds the real provider key, so agents never do. See `docker-compose.yml`.
+- **Company network, forward-proxy mode.** Device management installs the company root CA and proxy settings at onboarding. The gate decrypts LLM traffic, identifies the device, and blocks LLM use from unregistered devices or to unapproved providers, including self-hosted models. Ordinary web traffic passes through. See `docker-compose.corp.yml`.
+- **Servers and Kubernetes.** Agent workloads get default-deny egress with the gate as the only destination; the firewall, not the agent, guarantees nothing goes around it.
+
+Deep inspection (masking, tool policy, budgets) covers the Anthropic Messages API. Other LLM APIs (OpenAI, Ollama, Gemini) are recognized and allowed or blocked as a whole.
+
+## Testing
+
+28 automated tests cover allowed and blocked cases for every control, including false positives:
 
 ```sh
-cd proxy && go test ./...
-cd dashboard && npm install && npm run dev   # proxies /api to localhost:8081, token from ADMIN_TOKEN
+docker run --rm -v "$PWD/proxy":/src -w /src golang:1.26-alpine go test ./...
 ```
+
+## Repository
+
+```
+proxy/       the gate (Go): gateway, forward proxy, vault, policy, budgets, admin API
+dashboard/   React dashboard
+advisor/     AI advisor (Python, TypeSafe Jev)
+agent/       demo agent with read_file, write_file, send_email, post_to_slack
+demo/        fake model, demo workspace, company network simulation
+```
+
+## Current limitations
+
+- Audit events, review decisions and the injection queue live in memory and are lost on restart; budgets and kills persist in Redis.
+- Configuration is read at startup; restart the gate after editing it. Review decisions apply live.
+- Budgets are counted in tokens, not currency.
