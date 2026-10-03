@@ -91,9 +91,10 @@ INJECTION_QUESTION = {
 }
 
 
-def scan_injections(skip):
+def scan_injections(failed):
     for item in gate.get("/api/scans").raise_for_status().json():
-        if item["id"] in skip:
+        key = (item["id"], item["observed_at"])  # a restarted gate re-queues with a new timestamp
+        if key in failed:
             continue
         try:
             answers, model = ask_jev({"source": item["source"], "text": item["text"]}, {"injection": INJECTION_QUESTION})
@@ -101,7 +102,7 @@ def scan_injections(skip):
             if e.status in (401, 429, 529):
                 raise
             print(f"scan {item['id']}: {e}", flush=True)  # 422 and other client errors: don't retry
-            skip.add(item["id"])
+            failed.add(key)
             continue
         p = answers["injection"]["noul"]
         gate.post(f"/api/scans/{item['id']}/result", json={"injection": p, "model": model})
@@ -127,13 +128,15 @@ def main():
         while True:
             time.sleep(3600)
     print(f"advisor watching {GATE} with {JEV_MODEL}", flush=True)
-    done, skip = set(), set()
+    # The gate is the source of truth for what still needs work; these only
+    # remember items Jev rejected outright, so they aren't retried every tick.
+    failed_reviews, failed_scans = set(), set()
     tick = 0
     while True:
         try:
-            scan_injections(skip)
+            scan_injections(failed_scans)
             if tick % REVIEW_EVERY_TICKS == 0:
-                review_pending(done)
+                review_pending(failed_reviews)
         except JevError as e:
             print(e, flush=True)
             if e.status == 401:
@@ -148,9 +151,10 @@ def main():
         time.sleep(TICK_SECONDS)
 
 
-def review_pending(done):
+def review_pending(failed):
     for item in gate.get("/api/reviews").raise_for_status().json():
-        if item["status"] != "pending" or item.get("suggestion") or item["id"] in done:
+        key = (item["id"], item["first_seen"])
+        if item["status"] != "pending" or item.get("suggestion") or key in failed:
             continue
         try:
             suggestion = advise(item)
@@ -158,9 +162,8 @@ def review_pending(done):
             if e.status in (401, 429, 529):
                 raise
             print(f"{item['id']}: {e}", flush=True)  # 422 and other client errors: don't retry
-            done.add(item["id"])
+            failed.add(key)
             continue
-        done.add(item["id"])
         r = gate.post(f"/api/reviews/{item['id']}/suggestion", json=suggestion)
         print(f"{item['id']}: suggested {suggestion['value']} "
               f"({suggestion['confidence']:.2f} confidence, gate {r.status_code})", flush=True)
