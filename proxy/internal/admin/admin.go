@@ -6,16 +6,19 @@ package admin
 
 import (
 	"crypto/subtle"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Mikformatycy/hushgate/proxy/internal/audit"
 	"github.com/Mikformatycy/hushgate/proxy/internal/budget"
 	"github.com/Mikformatycy/hushgate/proxy/internal/config"
+	"github.com/Mikformatycy/hushgate/proxy/internal/metrics"
 	"github.com/Mikformatycy/hushgate/proxy/internal/policy"
 	"github.com/Mikformatycy/hushgate/proxy/internal/review"
 	"github.com/Mikformatycy/hushgate/proxy/internal/scan"
@@ -35,6 +38,9 @@ type API struct {
 	Scans        *scan.Store
 	Live         *config.Live // the policy file: thresholds, budgets, nodes; decisions are written back to it
 	Signatures   *signature.Set
+	Metrics      *metrics.Metrics
+	MetricsToken string // optional: lets Prometheus scrape /metrics without the admin token
+	AuditFile    string // optional: the JSON Lines audit trail; exports read it in full
 }
 
 type agentView struct {
@@ -66,6 +72,12 @@ func (a *API) Handler() http.Handler {
 	admin.HandleFunc("GET /api/reviews", a.reviews)
 	admin.HandleFunc("GET /api/signatures", a.signatures)
 	admin.HandleFunc("POST /api/reviews/{id}/decision", a.decide)
+	admin.HandleFunc("GET /api/audit/export", a.export)
+	admin.HandleFunc("GET /api/metrics/summary", a.metricsSummary)
+	admin.HandleFunc("GET /metrics", a.prometheus)
+
+	scraper := http.NewServeMux()
+	scraper.HandleFunc("GET /metrics", a.prometheus)
 
 	advisor := http.NewServeMux()
 	advisor.HandleFunc("GET /api/reviews", a.reviews)
@@ -80,10 +92,96 @@ func (a *API) Handler() http.Handler {
 			admin.ServeHTTP(w, r)
 		case tokenMatches(got, a.AdvisorToken):
 			advisor.ServeHTTP(w, r)
+		case tokenMatches(got, a.MetricsToken):
+			scraper.ServeHTTP(w, r)
 		default:
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 		}
 	})
+}
+
+func (a *API) prometheus(w http.ResponseWriter, r *http.Request) {
+	if a.Metrics == nil {
+		http.Error(w, "metrics disabled", http.StatusNotFound)
+		return
+	}
+	a.Metrics.Handler().ServeHTTP(w, r)
+}
+
+var started = time.Now()
+
+func (a *API) metricsSummary(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]any{"stages": a.Metrics.Summary(), "since": started})
+}
+
+// export downloads the audit trail as CSV or JSON Lines. Filters match the
+// dashboard's: kind (comma-separated), agent, q (text search) and
+// blocked=1 (only events where something was stopped).
+func (a *API) export(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	events := a.Events.After(0)
+	source := "memory"
+	if a.AuditFile != "" {
+		if all, err := audit.ReadFile(a.AuditFile); err == nil {
+			events, source = all, "file"
+		}
+	}
+	kinds := map[string]bool{}
+	for _, k := range strings.Split(q.Get("kind"), ",") {
+		if k = strings.TrimSpace(k); k != "" {
+			kinds[k] = true
+		}
+	}
+	agent, text, blocked := q.Get("agent"), strings.ToLower(q.Get("q")), q.Get("blocked") == "1"
+	var out []audit.Event
+	for _, e := range events {
+		switch {
+		case len(kinds) > 0 && !kinds[e.Kind]:
+		case agent != "" && e.Agent != agent:
+		case text != "" && !strings.Contains(strings.ToLower(e.Agent+" "+e.Tool+" "+e.Reason), text):
+		case blocked && !stopped(e):
+		default:
+			out = append(out, e)
+		}
+	}
+
+	name := "hushgate-audit-" + time.Now().UTC().Format("20060102-150405")
+	w.Header().Set("X-Audit-Source", source)
+	if q.Get("format") == "jsonl" {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		w.Header().Set("Content-Disposition", `attachment; filename="`+name+`.jsonl"`)
+		enc := json.NewEncoder(w)
+		for _, e := range out {
+			enc.Encode(e)
+		}
+		return
+	}
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`.csv"`)
+	cw := csv.NewWriter(w)
+	cw.Write([]string{"time", "agent", "kind", "action", "tool", "host", "reason", "placeholders", "usage"})
+	for _, e := range out {
+		usage := ""
+		if e.Usage != 0 {
+			usage = strconv.FormatInt(e.Usage, 10)
+		}
+		cw.Write([]string{e.Time.UTC().Format(time.RFC3339Nano), e.Agent, e.Kind, e.Action, e.Tool, e.Host,
+			e.Reason, strings.Join(e.Tokens, ";"), usage})
+	}
+	cw.Flush()
+}
+
+// stopped reports events where the gate refused something.
+func stopped(e audit.Event) bool {
+	switch e.Kind {
+	case "denied", "shadow_ai", "node_blocked", "model_blocked":
+		return true
+	case "tool_call", "signature":
+		return e.Action == "block" || e.Action == "kill"
+	case "policy":
+		return e.Action == "rejected"
+	}
+	return false
 }
 
 func tokenMatches(header []byte, token string) bool {

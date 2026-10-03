@@ -20,6 +20,7 @@ import (
 	"github.com/Mikformatycy/hushgate/proxy/internal/engine"
 	"github.com/Mikformatycy/hushgate/proxy/internal/forward"
 	"github.com/Mikformatycy/hushgate/proxy/internal/gateway"
+	"github.com/Mikformatycy/hushgate/proxy/internal/metrics"
 	"github.com/Mikformatycy/hushgate/proxy/internal/policy"
 	"github.com/Mikformatycy/hushgate/proxy/internal/review"
 	"github.com/Mikformatycy/hushgate/proxy/internal/scan"
@@ -46,7 +47,22 @@ func main() {
 	}
 
 	ring := audit.NewRing(2000)
-	logger := audit.Multi{audit.NewJSONLogger(os.Stdout), ring}
+	mx := metrics.New()
+	logger := audit.Multi{audit.NewJSONLogger(os.Stdout), ring, mx}
+	// A durable JSON Lines audit trail: SIEM-ready, exported from the dashboard,
+	// and replayed on startup so the dashboard keeps its history across restarts.
+	auditFile := os.Getenv("AUDIT_LOG_FILE")
+	if auditFile != "" {
+		if past, err := audit.ReadFile(auditFile); err == nil {
+			ring.Restore(past)
+			log.Printf("audit: restored %d events from %s", len(past), auditFile)
+		}
+		fl, err := audit.OpenFile(auditFile)
+		if err != nil {
+			log.Fatalf("AUDIT_LOG_FILE: %v", err)
+		}
+		logger = append(logger, fl)
+	}
 
 	// Everything a security team tunes lives in one policy file, reloaded
 	// live. Environment variables only carry deployment settings.
@@ -102,6 +118,7 @@ func main() {
 		Scans:       scans,
 		Guard:       eng.Guard,
 		Signatures:  eng.Signatures,
+		Metrics:     mx,
 	}
 
 	if caCert := os.Getenv("CA_CERT_FILE"); caCert != "" {
@@ -119,7 +136,7 @@ func main() {
 	if token := os.Getenv("ADMIN_TOKEN"); token != "" {
 		api := &admin.API{Token: token, AdvisorToken: os.Getenv("ADVISOR_TOKEN"), Events: ring, Budget: store,
 			Audit: logger, Vault: eng.Vault, Policy: eng.Policy, Reviews: eng.Reviews, Scans: scans, Live: live,
-			Signatures: eng.Signatures}
+			Signatures: eng.Signatures, Metrics: mx, MetricsToken: os.Getenv("METRICS_TOKEN"), AuditFile: auditFile}
 		adminAddr := env("ADMIN_ADDR", ":8081")
 		log.Printf("admin api listening on %s", adminAddr)
 		go func() { log.Fatal(http.ListenAndServe(adminAddr, api.Handler())) }()

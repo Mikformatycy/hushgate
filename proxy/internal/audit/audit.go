@@ -3,17 +3,20 @@
 package audit
 
 import (
+	"bufio"
 	"encoding/json"
 	"io"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
 
 type Event struct {
-	ID     int64     `json:"id"`
+	ID     int64     `json:"id,omitempty"` // per process (dashboard paging); absent in the audit file
 	Time   time.Time `json:"time"`
 	Agent  string    `json:"agent"`
-	Kind   string    `json:"kind"` // mask | tool_call | usage | denied | reset | shadow_ai | node_blocked
+	Kind   string    `json:"kind"` // mask | tool_call | usage | denied | reset | shadow_ai | node_blocked | policy | signature | ...
 	Host   string    `json:"host,omitempty"`
 	Tool   string    `json:"tool,omitempty"`
 	ToolID string    `json:"tool_id,omitempty"`
@@ -88,4 +91,64 @@ func (r *Ring) After(after int64) []Event {
 		}
 	}
 	return out
+}
+
+// FileLogger appends events as JSON lines: one complete, durable audit trail
+// that log shippers and SIEMs can ingest directly.
+type FileLogger struct {
+	mu sync.Mutex
+	f  *os.File
+}
+
+func OpenFile(path string) (*FileLogger, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return nil, err
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o640)
+	if err != nil {
+		return nil, err
+	}
+	return &FileLogger{f: f}, nil
+}
+
+func (l *FileLogger) Record(e Event) {
+	if e.Time.IsZero() {
+		e.Time = time.Now()
+	}
+	e.ID = 0 // ids are per process; the file is ordered by time
+	b, _ := json.Marshal(e)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.f.Write(append(b, '\n'))
+}
+
+// ReadFile loads every event from an audit file, skipping damaged lines (for
+// example a line cut short by a crash).
+func ReadFile(path string) ([]Event, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	var out []Event
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 64*1024), 4<<20)
+	for sc.Scan() {
+		var e Event
+		if json.Unmarshal(sc.Bytes(), &e) == nil && e.Kind != "" {
+			out = append(out, e)
+		}
+	}
+	return out, sc.Err()
+}
+
+// Restore refills the ring from a previous run, so the dashboard keeps its
+// history across restarts. Events get new ids in order.
+func (r *Ring) Restore(events []Event) {
+	if len(events) > r.size {
+		events = events[len(events)-r.size:]
+	}
+	for _, e := range events {
+		r.Record(e)
+	}
 }

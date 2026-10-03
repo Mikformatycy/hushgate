@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { api, type Agent, type Config, type GateEvent, type Review, type Signatures } from './api'
+import { api, type Agent, type Config, type GateEvent, type MetricsSummary, type Review, type Signatures } from './api'
 import { EventStatus, Meter, Mono, Panel, Status, Table, Td, TierBadge, eventMessage, time } from './ui'
 import { useGate } from './useGate'
 
@@ -10,7 +10,7 @@ const pageFromHash = (): Page =>
   pages.find((p) => p.toLowerCase().replace(' ', '-') === window.location.hash.slice(1)) ?? 'Dashboard'
 
 export default function App() {
-  const { events, agents, config, reviews, error, refreshAgents, refreshReviews } = useGate()
+  const { events, agents, config, reviews, perf, error, refreshAgents, refreshReviews } = useGate()
   const pending = reviews.filter((r) => r.status === 'pending').length
   const [page, setPageState] = useState<Page>(pageFromHash)
   const setPage = (p: Page) => {
@@ -135,7 +135,7 @@ export default function App() {
           </p>
           <h1 className="mb-5 text-2xl font-bold">{page}</h1>
 
-          {page === 'Dashboard' && <Dashboard events={events} agents={agents} onReset={refreshAgents} />}
+          {page === 'Dashboard' && <Dashboard events={events} agents={agents} perf={perf} onReset={refreshAgents} />}
           {page === 'Agents' && <Agents agents={agents} onReset={refreshAgents} />}
           {page === 'Nodes' && <Nodes config={config} events={events} />}
           {page === 'Review' && <ReviewPage reviews={reviews} onDecided={refreshReviews} />}
@@ -149,7 +149,17 @@ export default function App() {
   )
 }
 
-function Dashboard({ events, agents, onReset }: { events: GateEvent[]; agents: Agent[]; onReset: () => void }) {
+function Dashboard({
+  events,
+  agents,
+  perf,
+  onReset,
+}: {
+  events: GateEvent[]
+  agents: Agent[]
+  perf: MetricsSummary | null
+  onReset: () => void
+}) {
   const stats = useMemo(() => {
     const calls = events.filter((e) => e.kind === 'tool_call')
     return {
@@ -167,7 +177,7 @@ function Dashboard({ events, agents, onReset }: { events: GateEvent[]; agents: A
 
   return (
     <>
-      <div className="mb-5 grid grid-cols-2 gap-5 lg:grid-cols-5">
+      <div className="mb-5 grid grid-cols-2 gap-5 lg:grid-cols-3">
         <Metric label="Agents" value={agents.length}>
           <Status tone="ok">{agents.length - halted} running</Status>
           {halted > 0 && <Status tone="bad">{halted} halted</Status>}
@@ -184,15 +194,74 @@ function Dashboard({ events, agents, onReset }: { events: GateEvent[]; agents: A
         <Metric label="Secrets masked" value={stats.masked}>
           <span className="text-gray-500">placeholders sent instead of real values</span>
         </Metric>
+        <Metric label="Gate overhead (p50)" value={perf?.stages.preprocess.count ? ms(perf.stages.preprocess.p50_ms) : '—'}>
+          <span className="text-gray-500">
+            p95 {perf?.stages.preprocess.count ? ms(perf.stages.preprocess.p95_ms) : '—'} · tool check p95{' '}
+            {perf?.stages.tool_decision.count ? ms(perf.stages.tool_decision.p95_ms) : '—'}
+          </span>
+          <span className="text-gray-500">
+            LLM provider p50 {perf?.stages.upstream_first_byte.count ? ms(perf.stages.upstream_first_byte.p50_ms) : '—'}
+          </span>
+        </Metric>
         <Metric label="Tokens used" value={tokens.toLocaleString()}>
           <span className="text-gray-500">across all agents</span>
         </Metric>
       </div>
+      <Performance perf={perf} />
       <Panel title="Recent security events">
         <EventTable events={security} empty="No events yet. Point an agent at the gate to get started." />
       </Panel>
       <Agents agents={agents} onReset={onReset} />
     </>
+  )
+}
+
+function ms(v: number) {
+  return v < 1 ? `${(v * 1000).toFixed(0)} µs` : v < 1000 ? `${v.toFixed(v < 10 ? 1 : 0)} ms` : `${(v / 1000).toFixed(2)} s`
+}
+
+const stageInfo = [
+  { key: 'preprocess', label: 'Gate: request checks', note: 'budget, allowed model, masking, before forwarding' },
+  { key: 'tool_decision', label: 'Gate: tool call decision', note: 'policy, Bash guard, attack signatures' },
+  { key: 'upstream_first_byte', label: 'LLM provider', note: 'time to first byte; not caused by the gate' },
+  { key: 'total', label: 'End to end', note: 'whole request, including the full streamed answer' },
+] as const
+
+function Performance({ perf }: { perf: MetricsSummary | null }) {
+  return (
+    <Panel
+      title="Performance"
+      actions={<span className="text-xs text-gray-500">last 1,000 samples · full histograms in Prometheus (localhost:9090)</span>}
+    >
+      <Table head={['Stage', 'p50', 'p95', 'p99', 'Max', 'Samples']}>
+        {stageInfo.map((s) => {
+          const v = perf?.stages[s.key]
+          return (
+            <tr key={s.key}>
+              <Td>
+                <p className="font-medium">{s.label}</p>
+                <p className="text-xs text-gray-500">{s.note}</p>
+              </Td>
+              {v?.count ? (
+                <>
+                  <Td className="font-mono">{ms(v.p50_ms)}</Td>
+                  <Td className="font-mono">{ms(v.p95_ms)}</Td>
+                  <Td className="font-mono">{ms(v.p99_ms)}</Td>
+                  <Td className="font-mono">{ms(v.max_ms)}</Td>
+                  <Td>{v.count}</Td>
+                </>
+              ) : (
+                [0, 1, 2, 3, 4].map((i) => (
+                  <Td key={i} className="text-gray-400">
+                    —
+                  </Td>
+                ))
+              )}
+            </tr>
+          )
+        })}
+      </Table>
+    </Panel>
   )
 }
 
@@ -244,21 +313,30 @@ function Agents({ agents, onReset }: { agents: Agent[]; onReset: () => void }) {
   )
 }
 
-const filters: Record<string, (e: GateEvent) => boolean> = {
-  'All events': () => true,
-  'Tool calls': (e) => e.kind === 'tool_call',
-  'Blocked and killed': (e) =>
-    (e.kind === 'tool_call' && e.action !== 'allow') || ['denied', 'shadow_ai', 'node_blocked'].includes(e.kind),
-  'Network (shadow AI, devices)': (e) => e.kind === 'shadow_ai' || e.kind === 'node_blocked',
-  Masking: (e) => e.kind === 'mask',
-  Usage: (e) => e.kind === 'usage',
+// Each filter has the same meaning on screen and in the server-side export.
+const stopped = (e: GateEvent) =>
+  ['denied', 'shadow_ai', 'node_blocked', 'model_blocked'].includes(e.kind) ||
+  (['tool_call', 'signature'].includes(e.kind) && (e.action === 'block' || e.action === 'kill')) ||
+  (e.kind === 'policy' && e.action === 'rejected')
+
+const filters: Record<string, { match: (e: GateEvent) => boolean; query: string }> = {
+  'All events': { match: () => true, query: '' },
+  'Tool calls': { match: (e) => e.kind === 'tool_call', query: 'kind=tool_call' },
+  'Blocked and killed': { match: stopped, query: 'blocked=1' },
+  'Attack signatures': { match: (e) => e.kind === 'signature', query: 'kind=signature' },
+  'Network (shadow AI, devices)': {
+    match: (e) => e.kind === 'shadow_ai' || e.kind === 'node_blocked',
+    query: 'kind=shadow_ai,node_blocked',
+  },
+  Masking: { match: (e) => e.kind === 'mask', query: 'kind=mask' },
+  Usage: { match: (e) => e.kind === 'usage', query: 'kind=usage' },
 }
 
 function AuditLog({ events }: { events: GateEvent[] }) {
   const [filter, setFilter] = useState('All events')
   const [query, setQuery] = useState('')
   const shown = events
-    .filter(filters[filter])
+    .filter(filters[filter].match)
     .filter((e) => !query || `${e.agent} ${e.tool ?? ''} ${e.reason ?? ''}`.toLowerCase().includes(query.toLowerCase()))
     .slice(-500)
     .reverse()
@@ -278,6 +356,16 @@ function AuditLog({ events }: { events: GateEvent[] }) {
               <option key={f}>{f}</option>
             ))}
           </select>
+          {(['csv', 'jsonl'] as const).map((fmt) => (
+            <a
+              key={fmt}
+              href={`/api/audit/export?format=${fmt}&${filters[filter].query}${query ? `&q=${encodeURIComponent(query)}` : ''}`}
+              className="rounded-full border-2 border-link px-3 py-0.5 font-bold whitespace-nowrap text-link hover:bg-blue-50"
+              title="Full audit trail from the gate's log file, with the current filter"
+            >
+              Export {fmt === 'csv' ? 'CSV' : 'JSON'}
+            </a>
+          ))}
         </div>
       }
     >

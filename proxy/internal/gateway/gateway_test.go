@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"encoding/json"
+	"github.com/Mikformatycy/hushgate/proxy/internal/metrics"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -333,5 +334,26 @@ func TestAlertSignatureAllowsAndRecords(t *testing.T) {
 	}
 	if !alert {
 		t.Fatal("alert not recorded")
+	}
+}
+
+func TestGatewayRecordsMetrics(t *testing.T) {
+	srv, _, _, _ := setup(t, sse("write_file", `{"path":"x","content":"{{VAULT_ENV_DB_PASSWORD}}"}`))
+	gw := srv.Config.Handler.(*Gateway)
+	gw.Metrics = metrics.New()
+	post(t, srv.URL)
+	s := gw.Metrics.Summary()
+	for _, stage := range []string{metrics.StagePreprocess, metrics.StageUpstreamTTFB, metrics.StageToolDecision, metrics.StageTotal} {
+		if s[stage].Count != 1 {
+			t.Errorf("stage %s: %+v", stage, s[stage])
+		}
+	}
+	rec := httptest.NewRecorder()
+	gw.Metrics.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/metrics", nil))
+	for _, want := range []string{`hushgate_requests_total{code="OK",route="messages"} 1`, `hushgate_masked_values_total{tier="C3"} 1`,
+		`hushgate_llm_tokens_total{agent="a1"} 151`} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("missing %s", want)
+		}
 	}
 }

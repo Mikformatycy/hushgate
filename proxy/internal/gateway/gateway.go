@@ -11,9 +11,11 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/Mikformatycy/hushgate/proxy/internal/audit"
 	"github.com/Mikformatycy/hushgate/proxy/internal/budget"
+	"github.com/Mikformatycy/hushgate/proxy/internal/metrics"
 	"github.com/Mikformatycy/hushgate/proxy/internal/policy"
 	"github.com/Mikformatycy/hushgate/proxy/internal/review"
 	"github.com/Mikformatycy/hushgate/proxy/internal/scan"
@@ -39,6 +41,7 @@ type Gateway struct {
 	Scans       *scan.Store   // optional: queue tool results for injection scanning
 	Guard       *shell.Guard  // optional: shell calls that reach the network count as network tools
 	Signatures  *signature.Set
+	Metrics     *metrics.Metrics // optional; nil-safe
 }
 
 var hopHeaders = map[string]bool{
@@ -52,6 +55,11 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
 		return
 	}
+	start := time.Now()
+	sw := &statusWriter{ResponseWriter: w, code: http.StatusOK}
+	w = sw
+	defer func() { g.Metrics.Request(route(r.URL.Path), sw.code, time.Since(start)) }()
+
 	ctx := r.Context()
 	agent := r.Header.Get("X-Agent-Id")
 	if agent == "" {
@@ -100,13 +108,19 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, refs := g.Vault.Mask(body)
 	if len(refs) > 0 {
 		g.Audit.Record(audit.Event{Agent: agent, Kind: "mask", Tokens: tokenNames(refs)})
+		for _, ref := range refs {
+			g.Metrics.Masked(ref.Tier.String(), 1)
+		}
 	}
 	if r.URL.Path == "/v1/messages" {
 		g.discoverTools(agent, body)
 		g.queueToolResults(agent, body)
 	}
 
+	g.Metrics.Observe(metrics.StagePreprocess, time.Since(start))
+	upstreamStart := time.Now()
 	resp, err := g.forward(ctx, r, body)
+	g.Metrics.Observe(metrics.StageUpstreamTTFB, time.Since(upstreamStart))
 	if err != nil {
 		log.Printf("upstream: %v", err)
 		apiError(w, http.StatusBadGateway, "api_error", "hushgate: upstream unreachable")
@@ -281,6 +295,7 @@ func blockText(raw json.RawMessage) string {
 // decideTool applies policy to one complete tool call. It returns the action
 // and the (possibly rehydrated) JSON input to hand to the agent.
 func (g *Gateway) decideTool(ctx context.Context, agent, id, name, input string) (policy.Action, string, string) {
+	defer func(start time.Time) { g.Metrics.Observe(metrics.StageToolDecision, time.Since(start)) }(time.Now())
 	refs := g.Vault.Tokens(input)
 	sink := g.Policy.SinkFor(name)
 	var guardNote, shellText string
@@ -318,6 +333,34 @@ func (g *Gateway) decideTool(ctx context.Context, agent, id, name, input string)
 		input = g.Vault.RehydrateJSON(input)
 	}
 	return act, input, reason
+}
+
+// statusWriter records the status code for metrics and keeps Flush working,
+// which the SSE stream filter needs.
+type statusWriter struct {
+	http.ResponseWriter
+	code int
+}
+
+func (s *statusWriter) WriteHeader(code int) {
+	s.code = code
+	s.ResponseWriter.WriteHeader(code)
+}
+
+func (s *statusWriter) Flush() {
+	if f, ok := s.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func route(path string) string {
+	switch path {
+	case "/v1/messages":
+		return "messages"
+	case "/v1/messages/count_tokens":
+		return "count_tokens"
+	}
+	return "other"
 }
 
 // commandOf returns the shell command of a shell tool call ("command" field,
@@ -378,6 +421,7 @@ func (g *Gateway) recordUsage(ctx context.Context, agent string, tokens int64) {
 	if tokens == 0 {
 		return
 	}
+	g.Metrics.Tokens(agent, tokens)
 	total, err := g.Budget.AddUsage(ctx, agent, tokens)
 	if err != nil {
 		log.Printf("add usage: %v", err)
