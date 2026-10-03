@@ -20,6 +20,7 @@ import (
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/forward"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/gateway"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/policy"
+	"github.com/Mikformatycy/goldman-sachs/proxy/internal/review"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/vault"
 )
 
@@ -38,7 +39,7 @@ func main() {
 	}
 
 	v := vault.New(maskFrom)
-	var allVars []vault.Var
+	reviews := review.NewStore()
 	for _, path := range strings.Split(os.Getenv("VAULT_ENV_FILES"), ",") {
 		if path = strings.TrimSpace(path); path == "" {
 			continue
@@ -47,9 +48,12 @@ func main() {
 		if err != nil {
 			log.Fatalf("load %s: %v", path, err)
 		}
-		allVars = append(allVars, vars...)
 		for _, x := range vars {
-			log.Printf("vault: %s %s", x.Tier, x.Name)
+			log.Printf("vault: %s %s (%s)", x.Tier, x.Name, x.Reason)
+			if x.Reason == vault.FallbackReason {
+				val, _ := v.Value(x.Name)
+				reviews.ObserveVariable(x.Name, val, x.Tier.String()+" (masked by default)")
+			}
 		}
 	}
 
@@ -86,6 +90,7 @@ func main() {
 		Policy:      pol,
 		Budget:      store,
 		Audit:       logger,
+		Reviews:     reviews,
 	}
 
 	nodes, err := forward.LoadNodes(os.Getenv("NODES_FILE"))
@@ -108,8 +113,8 @@ func main() {
 	}
 
 	if token := os.Getenv("ADMIN_TOKEN"); token != "" {
-		api := &admin.API{Token: token, Events: ring, Budget: store, Audit: logger,
-			Vars: allVars, MaskFrom: maskFrom, Policy: pol, TokenLimit: limit, Nodes: nodes.List()}
+		api := &admin.API{Token: token, AdvisorToken: os.Getenv("ADVISOR_TOKEN"), Events: ring, Budget: store,
+			Audit: logger, Vault: v, Policy: pol, Reviews: reviews, TokenLimit: limit, Nodes: nodes.List()}
 		adminAddr := env("ADMIN_ADDR", ":8081")
 		log.Printf("admin api listening on %s", adminAddr)
 		go func() { log.Fatal(http.ListenAndServe(adminAddr, api.Handler())) }()

@@ -37,19 +37,23 @@ type Vault struct {
 
 	mu      sync.RWMutex
 	byToken map[string]*entry
-	ordered []*entry // env entries to mask, longest value first
+	env     map[string]*entry // every loaded variable, masked or not
+	vars    []Var             // load order, with the deciding rule
+	ordered []*entry          // env entries to mask, longest value first
 }
 
 // New creates a vault that masks values at or above maskFrom.
 func New(maskFrom Tier) *Vault {
-	return &Vault{maskFrom: maskFrom, byToken: map[string]*entry{}}
+	return &Vault{maskFrom: maskFrom, byToken: map[string]*entry{}, env: map[string]*entry{}}
 }
 
-// Add registers a named value. Values below the mask threshold are ignored.
+// Add registers a named value. Only values at or above the mask threshold
+// are masked; the rest are kept so a later SetTier can promote them.
 func (v *Vault) Add(name, value string, tier Tier) {
-	if tier < v.maskFrom || len(value) < 4 {
-		return
-	}
+	v.add(name, value, tier, "registered directly")
+}
+
+func (v *Vault) add(name, value string, tier Tier, reason string) {
 	e := &entry{
 		Name:    name,
 		Tier:    tier,
@@ -59,8 +63,68 @@ func (v *Vault) Add(name, value string, tier Tier) {
 	}
 	v.mu.Lock()
 	defer v.mu.Unlock()
+	if _, exists := v.env[name]; !exists {
+		v.vars = append(v.vars, Var{Name: name})
+	}
+	for i := range v.vars {
+		if v.vars[i].Name == name {
+			v.vars[i].Tier, v.vars[i].Reason = tier, reason
+		}
+	}
+	v.env[name] = e
 	v.byToken[e.Token] = e
-	v.ordered = append(v.ordered, e)
+	v.rebuild()
+}
+
+// SetTier reclassifies a loaded variable at runtime (after a human approves a
+// review) and records why.
+func (v *Vault) SetTier(name string, tier Tier, reason string) bool {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	e, ok := v.env[name]
+	if !ok {
+		return false
+	}
+	e.Tier = tier
+	for i := range v.vars {
+		if v.vars[i].Name == name {
+			v.vars[i].Tier, v.vars[i].Reason = tier, reason
+		}
+	}
+	v.rebuild()
+	return true
+}
+
+// Vars lists loaded variables with their current tier and deciding rule.
+func (v *Vault) Vars() []Var {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	return append([]Var(nil), v.vars...)
+}
+
+// Value returns a loaded variable's raw value, for in-process use only (the
+// review queue derives a shape from it). Never send it anywhere.
+func (v *Vault) Value(name string) (string, bool) {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	e, ok := v.env[name]
+	if !ok {
+		return "", false
+	}
+	return e.raw, true
+}
+
+// MaskFrom is the lowest tier that gets masked.
+func (v *Vault) MaskFrom() Tier { return v.maskFrom }
+
+// rebuild recomputes the mask list; caller holds v.mu.
+func (v *Vault) rebuild() {
+	v.ordered = v.ordered[:0]
+	for _, e := range v.env {
+		if e.Tier >= v.maskFrom && len(e.raw) >= 4 {
+			v.ordered = append(v.ordered, e)
+		}
+	}
 	sort.Slice(v.ordered, func(i, j int) bool { return len(v.ordered[i].raw) > len(v.ordered[j].raw) })
 }
 
@@ -177,7 +241,7 @@ func (v *Vault) LoadEnvFile(path string) ([]Var, error) {
 				tier, reason = t, "annotated @class: "+t.String()+" in .env"
 			}
 		}
-		v.Add(name, value, tier)
+		v.add(name, value, tier, reason)
 		vars = append(vars, Var{Name: name, Tier: tier, Reason: reason})
 	}
 	return vars, sc.Err()

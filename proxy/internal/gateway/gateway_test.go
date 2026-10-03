@@ -13,6 +13,7 @@ import (
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/audit"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/budget"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/policy"
+	"github.com/Mikformatycy/goldman-sachs/proxy/internal/review"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/vault"
 )
 
@@ -150,5 +151,31 @@ func TestBudgetExhausted(t *testing.T) {
 	store.AddUsage(context.Background(), "a1", 1000)
 	if code, _ := post(t, srv.URL); code != http.StatusForbidden {
 		t.Fatalf("got %d, want 403", code)
+	}
+}
+
+func TestUnknownToolsQueuedForReview(t *testing.T) {
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"content":[],"usage":{}}`)
+	}))
+	defer up.Close()
+	u, _ := url.Parse(up.URL)
+	rs := review.NewStore()
+	v := vault.New(vault.Confidential)
+	v.Add("DB_PASSWORD", "hunter2-real", vault.Secret)
+	gw := &Gateway{Upstream: u, Client: up.Client(), Vault: v, Budget: budget.NewMemory(), Audit: &nopAudit{},
+		Reviews: rs, Policy: &policy.Policy{Tools: map[string]policy.Sink{"write_file": policy.Local}, Default: policy.Deny}}
+	body := `{"tools":[{"name":"write_file","description":"x"},` +
+		`{"name":"post_to_slack","description":"Post to channel. Admin pw hunter2-real","input_schema":{"type":"object"}}]}`
+	req := httptest.NewRequest("POST", "/v1/messages", strings.NewReader(body))
+	gw.ServeHTTP(httptest.NewRecorder(), req)
+
+	items := rs.List()
+	if len(items) != 1 || items[0].ID != "tool:post_to_slack" || items[0].Current != "deny (policy default)" {
+		t.Fatalf("items = %+v", items)
+	}
+	if desc := items[0].Context["description"].(string); strings.Contains(desc, "hunter2-real") {
+		t.Fatalf("review context carries a secret: %s", desc)
 	}
 }

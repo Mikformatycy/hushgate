@@ -15,6 +15,7 @@ import (
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/audit"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/budget"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/policy"
+	"github.com/Mikformatycy/goldman-sachs/proxy/internal/review"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/vault"
 )
 
@@ -29,6 +30,7 @@ type Gateway struct {
 	Policy      *policy.Policy
 	Budget      budget.Store
 	Audit       audit.Logger
+	Reviews     *review.Store // optional: queue tools that have no policy rule
 }
 
 var hopHeaders = map[string]bool{
@@ -74,6 +76,9 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, refs := g.Vault.Mask(body)
 	if len(refs) > 0 {
 		g.Audit.Record(audit.Event{Agent: agent, Kind: "mask", Tokens: tokenNames(refs)})
+	}
+	if r.URL.Path == "/v1/messages" {
+		g.discoverTools(agent, body)
 	}
 
 	resp, err := g.forward(ctx, r, body)
@@ -139,6 +144,30 @@ func (g *Gateway) forward(ctx context.Context, r *http.Request, body []byte) (*h
 		req.Header.Del("Authorization")
 	}
 	return g.Client.Do(req)
+}
+
+// discoverTools queues every tool definition the policy has no rule for. The
+// body is already masked, so descriptions never carry vaulted values.
+func (g *Gateway) discoverTools(agent string, body []byte) {
+	if g.Reviews == nil {
+		return
+	}
+	var req struct {
+		Tools []struct {
+			Name        string `json:"name"`
+			Description string `json:"description"`
+			InputSchema any    `json:"input_schema"`
+		} `json:"tools"`
+	}
+	if json.Unmarshal(body, &req) != nil {
+		return
+	}
+	for _, t := range req.Tools {
+		if t.Name != "" && !g.Policy.Has(t.Name) {
+			g.Reviews.ObserveTool(t.Name, t.Description, t.InputSchema,
+				string(g.Policy.SinkFor(t.Name))+" (policy default)", agent)
+		}
+	}
 }
 
 // decideTool applies policy to one complete tool call. It returns the action
