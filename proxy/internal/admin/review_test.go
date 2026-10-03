@@ -7,12 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/audit"
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/budget"
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/policy"
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/review"
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/scan"
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/vault"
+	"github.com/Mikformatycy/hushgate/proxy/internal/audit"
+	"github.com/Mikformatycy/hushgate/proxy/internal/budget"
+	"github.com/Mikformatycy/hushgate/proxy/internal/policy"
+	"github.com/Mikformatycy/hushgate/proxy/internal/review"
+	"github.com/Mikformatycy/hushgate/proxy/internal/scan"
+	"github.com/Mikformatycy/hushgate/proxy/internal/vault"
 )
 
 func reviewAPI(t *testing.T) (*API, http.Handler) {

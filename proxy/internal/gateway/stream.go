@@ -8,7 +8,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/policy"
+	"github.com/Mikformatycy/hushgate/proxy/internal/policy"
 )
 
 // streamFilter rewrites an Anthropic SSE stream. Text passes through as it

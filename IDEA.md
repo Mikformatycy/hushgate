@@ -1,7 +1,7 @@
 # Context: HackYeah 2026 - Goldman Sachs "AI Control Layer" Challenge
 
 ## The Objective
-We are building an enterprise-grade "Agentic API Gateway" (codenamed Provenance Gate) in under 22 hours. The goal is to provide strict, deterministic security guardrails for AI agents without slowing down developer innovation. 
+We are building an enterprise-grade "Agentic API Gateway" (codenamed HushGate) in under 22 hours. The goal is to provide strict, deterministic security guardrails for AI agents without slowing down developer innovation. 
 
 The sponsor (Goldman Sachs) evaluates based on three criteria:
 1. **Sensitive Data Exposure:** Controlling data flow and masking secrets deterministically.

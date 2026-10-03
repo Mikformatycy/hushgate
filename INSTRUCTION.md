@@ -1,4 +1,4 @@
-# Running Provenance Gate
+# Running HushGate
 
 ## Requirements
 

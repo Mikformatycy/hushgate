@@ -1,4 +1,4 @@
-"""AI policy advisor for the Provenance Gate, powered by TypeSafe Jev.
+"""AI policy advisor for the HushGate, powered by TypeSafe Jev.
 
 Two jobs, both advisory:
 - Review queue: attach a suggested decision to each pending item.

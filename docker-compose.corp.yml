@@ -2,7 +2,7 @@
 #   docker compose -f docker-compose.corp.yml up -d --build
 # Laptops have no ANTHROPIC_BASE_URL. Their only way out is the gate's
 # TLS-inspecting forward proxy; the "internet" network holds fake hosts.
-name: provenance-corp
+name: hushgate-corp
 
 services:
   certs:
