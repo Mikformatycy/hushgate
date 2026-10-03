@@ -1,16 +1,17 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { api, type Agent, type Config, type GateEvent } from './api'
+import { api, type Agent, type Config, type GateEvent, type Review } from './api'
 import { EventStatus, Meter, Mono, Panel, Status, Table, Td, TierBadge, eventMessage, time } from './ui'
 import { useGate } from './useGate'
 
-const pages = ['Dashboard', 'Agents', 'Nodes', 'Audit log', 'Vault', 'Policy'] as const
+const pages = ['Dashboard', 'Agents', 'Nodes', 'Review', 'Audit log', 'Vault', 'Policy'] as const
 type Page = (typeof pages)[number]
 
 const pageFromHash = (): Page =>
   pages.find((p) => p.toLowerCase().replace(' ', '-') === window.location.hash.slice(1)) ?? 'Dashboard'
 
 export default function App() {
-  const { events, agents, config, error, refreshAgents } = useGate()
+  const { events, agents, config, reviews, error, refreshAgents, refreshReviews } = useGate()
+  const pending = reviews.filter((r) => r.status === 'pending').length
   const [page, setPageState] = useState<Page>(pageFromHash)
   const setPage = (p: Page) => {
     window.location.hash = p.toLowerCase().replace(' ', '-')
@@ -48,11 +49,14 @@ export default function App() {
             <button
               key={p}
               onClick={() => setPage(p)}
-              className={`block w-full px-5 py-1.5 text-left hover:text-link ${
+              className={`flex w-full items-center justify-between px-5 py-1.5 text-left hover:text-link ${
                 page === p ? 'border-l-4 border-link pl-4 font-bold text-link' : 'text-gray-700'
               }`}
             >
               {p}
+              {p === 'Review' && pending > 0 && (
+                <span className="rounded-full bg-link px-2 text-xs font-bold text-white">{pending}</span>
+              )}
             </button>
           ))}
         </nav>
@@ -93,6 +97,7 @@ export default function App() {
           {page === 'Dashboard' && <Dashboard events={events} agents={agents} onReset={refreshAgents} />}
           {page === 'Agents' && <Agents agents={agents} onReset={refreshAgents} />}
           {page === 'Nodes' && <Nodes config={config} events={events} />}
+          {page === 'Review' && <ReviewPage reviews={reviews} onDecided={refreshReviews} />}
           {page === 'Audit log' && <AuditLog events={events} />}
           {page === 'Vault' && <Vault config={config} />}
           {page === 'Policy' && <Policy config={config} />}
@@ -363,6 +368,180 @@ function Nodes({ config, events }: { config: Config | null; events: GateEvent[] 
         </Table>
       </Panel>
     </>
+  )
+}
+
+function ReviewPage({ reviews, onDecided }: { reviews: Review[]; onDecided: () => void }) {
+  const pending = reviews.filter((r) => r.status === 'pending')
+  const resolved = reviews.filter((r) => r.status !== 'pending').reverse()
+  return (
+    <>
+      <div className="mb-5 rounded-lg border-l-4 border-[#7d4dc0] bg-white px-5 py-3 text-gray-700 shadow-[0_1px_1px_rgba(0,28,36,.3)]">
+        <b>AI suggests, a person decides, the rules enforce.</b> These are cases the deterministic rules could not settle:
+        tools with no policy entry and variables no rule recognized. Until someone decides, the safe default applies. The
+        AI advisor (TypeSafe Jev, a classifier with calibrated probabilities) never sees secret values, only tool
+        definitions and a value's shape, and its credentials can post suggestions but cannot apply them.
+      </div>
+      <Panel title={`Pending review (${pending.length})`}>
+        {pending.length === 0 && <p className="px-5 py-8 text-center text-gray-500">Nothing waiting for review.</p>}
+        {pending.map((r) => (
+          <ReviewCard key={r.id} r={r} onDecided={onDecided} />
+        ))}
+      </Panel>
+      <Panel title={`Decided (${resolved.length})`}>
+        <Table head={['Item', 'Decision', 'AI suggested', 'Decided at']} empty="No decisions yet.">
+          {resolved.map((r) => (
+            <tr key={r.id}>
+              <Td>
+                <span className="mr-2 text-xs text-gray-500 uppercase">{r.kind}</span>
+                <Mono>{r.subject}</Mono>
+              </Td>
+              <Td>{r.status === 'dismissed' ? <span className="text-gray-500">Kept: {r.current}</span> : <b>{r.decision}</b>}</Td>
+              <Td>
+                {r.suggestion ? (
+                  r.suggestion.value === r.decision ? (
+                    <Status tone="ok">{r.suggestion.value} (accepted)</Status>
+                  ) : (
+                    <Status tone="warn">{r.suggestion.value} (overridden)</Status>
+                  )
+                ) : (
+                  <span className="text-gray-500">—</span>
+                )}
+              </Td>
+              <Td className="font-mono text-xs text-gray-600">{r.decided_at ? time(r.decided_at) : ''}</Td>
+            </tr>
+          ))}
+        </Table>
+      </Panel>
+    </>
+  )
+}
+
+const optionLabel: Record<string, string> = {
+  local: 'Local (secrets restored)',
+  network: 'Network (secrets block or kill)',
+  deny: 'Deny',
+  C0: 'C0 · Public',
+  C1: 'C1 · Internal',
+  C2: 'C2 · Confidential',
+  C3: 'C3 · Secret',
+}
+
+function ReviewCard({ r, onDecided }: { r: Review; onDecided: () => void }) {
+  const [value, setValue] = useState(r.suggestion?.value ?? r.options[r.options.length - 1])
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  // Pick up a suggestion that arrives while the card is open, unless the user changed the value.
+  const [touched, setTouched] = useState(false)
+  if (!touched && r.suggestion && value !== r.suggestion.value) setValue(r.suggestion.value)
+
+  const decide = async (action: 'apply' | 'dismiss') => {
+    setBusy(true)
+    setErr(null)
+    try {
+      await api.decide(r.id, action, value)
+      onDecided()
+    } catch (e) {
+      setErr(String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const ctx = r.context as Record<string, unknown>
+  return (
+    <div className="grid gap-5 border-b border-gray-200 px-5 py-4 last:border-b-0 lg:grid-cols-[1fr_1fr_auto]">
+      <div className="min-w-0">
+        <p className="text-xs font-bold text-gray-500 uppercase">
+          {r.kind === 'tool' ? 'Tool with no policy rule' : 'Variable no rule recognized'}
+        </p>
+        <p className="my-1 text-lg">
+          <Mono>{r.subject}</Mono>
+        </p>
+        {r.kind === 'tool' ? (
+          <>
+            <p className="text-gray-700">{String(ctx.description ?? '')}</p>
+            <details className="mt-1 text-xs text-gray-600">
+              <summary className="cursor-pointer text-link">Input schema</summary>
+              <pre className="mt-1 overflow-x-auto rounded bg-gray-50 p-2">{JSON.stringify(ctx.input_schema, null, 2)}</pre>
+            </details>
+          </>
+        ) : (
+          <p className="text-gray-700">
+            Value shape: <Mono>{String(ctx.pattern)}</Mono> · {String(ctx.length)} chars ·{' '}
+            {(ctx.classes as string[] | undefined)?.join(', ')} · {String(ctx.entropy)} bits/char
+          </p>
+        )}
+        <p className="mt-2 text-sm text-gray-600">
+          Today: <b>{r.current}</b>
+          {r.seen_by && <> · first used by {r.seen_by}</>} · since {time(r.first_seen)}
+        </p>
+      </div>
+
+      <div className="rounded-lg border border-[#d9c8f0] bg-[#f8f4fd] p-3">
+        <p className="mb-1 text-xs font-bold tracking-wide text-[#5a2d91] uppercase">✦ AI suggestion</p>
+        {r.suggestion ? (
+          <>
+            <p className="font-bold">{optionLabel[r.suggestion.value] ?? r.suggestion.value}</p>
+            {r.suggestion.rationale && <p className="text-gray-700">{r.suggestion.rationale}</p>}
+            <div className="mt-2 space-y-1">
+              {r.options.map((o) => {
+                const p = r.suggestion?.probabilities?.[o] ?? 0
+                return (
+                  <div key={o} className="flex items-center gap-2 text-xs">
+                    <span className="w-14 shrink-0 font-mono">{o}</span>
+                    <div className="h-2 flex-1 rounded bg-white">
+                      <div
+                        className={`h-2 rounded ${o === r.suggestion?.value ? 'bg-[#7d4dc0]' : 'bg-[#cdb8ea]'}`}
+                        style={{ width: `${p * 100}%` }}
+                      />
+                    </div>
+                    <span className="w-10 text-right tabular-nums">{(p * 100).toFixed(0)}%</span>
+                  </div>
+                )
+              })}
+            </div>
+            <p className="mt-2 text-xs text-gray-500">
+              TypeSafe {r.suggestion.model} · {(r.suggestion.confidence * 100).toFixed(0)}% confidence (calibrated)
+            </p>
+          </>
+        ) : (
+          <p className="text-gray-500">Waiting for the advisor. You can decide without it.</p>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2 lg:w-56">
+        <select
+          value={value}
+          onChange={(e) => {
+            setTouched(true)
+            setValue(e.target.value)
+          }}
+          className="rounded border border-gray-400 px-2 py-1"
+        >
+          {r.options.map((o) => (
+            <option key={o} value={o}>
+              {optionLabel[o] ?? o}
+              {o === r.suggestion?.value ? ' ✦' : ''}
+            </option>
+          ))}
+        </select>
+        <button
+          disabled={busy}
+          onClick={() => decide('apply')}
+          className="rounded-full bg-warn px-4 py-1 font-bold text-[#16191f] hover:brightness-95 disabled:opacity-50"
+        >
+          Apply
+        </button>
+        <button
+          disabled={busy}
+          onClick={() => decide('dismiss')}
+          className="rounded-full border-2 border-link px-4 py-0.5 font-bold text-link hover:bg-blue-50 disabled:opacity-50"
+        >
+          Keep current rule
+        </button>
+        {err && <p className="text-xs text-bad">{err}</p>}
+      </div>
+    </div>
   )
 }
 

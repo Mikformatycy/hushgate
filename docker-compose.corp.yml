@@ -30,6 +30,7 @@ services:
       REDIS_ADDR: redis:6379
       TOKEN_LIMIT: 200000
       ADMIN_TOKEN: ${ADMIN_TOKEN:-demo-admin-token}
+      ADVISOR_TOKEN: ${ADVISOR_TOKEN:-demo-advisor-token}
       CA_CERT_FILE: /certs/corp-ca.crt
       CA_KEY_FILE: /certs/corp-ca.key
       UPSTREAM_CA_FILES: /certs/internet-ca.crt
@@ -49,6 +50,18 @@ services:
   redis:
     image: redis:7-alpine
     networks: [backend]
+
+  # AI policy advisor (TypeSafe Jev). Sits on mgmt only, so it reaches the real Jev API
+  # (not the simulated internet) and the gate's admin port with a
+  # suggestion-only token.
+  advisor:
+    build: ./advisor
+    environment:
+      GATE_ADMIN_URL: http://gate:8081
+      ADVISOR_TOKEN: ${ADVISOR_TOKEN:-demo-advisor-token}
+      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
+    networks: [mgmt]
+    depends_on: [gate]
 
   dashboard:
     build: ./dashboard

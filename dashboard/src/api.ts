@@ -2,11 +2,11 @@ export type GateEvent = {
   id: number
   time: string
   agent: string
-  kind: 'mask' | 'tool_call' | 'usage' | 'denied' | 'reset' | 'shadow_ai' | 'node_blocked'
+  kind: 'mask' | 'tool_call' | 'usage' | 'denied' | 'reset' | 'shadow_ai' | 'node_blocked' | 'suggestion' | 'review'
   host?: string
   tool?: string
   tool_id?: string
-  action?: 'allow' | 'block' | 'kill'
+  action?: string
   reason?: string
   tokens?: string[]
   usage?: number
@@ -29,6 +29,28 @@ export type Config = {
   nodes: { id: string; owner: string }[] | null
 }
 
+export type Review = {
+  id: string
+  kind: 'tool' | 'variable'
+  subject: string
+  context: Record<string, unknown>
+  current: string
+  options: string[]
+  first_seen: string
+  seen_by?: string
+  suggestion?: {
+    value: string
+    probabilities?: Record<string, number>
+    confidence: number
+    rationale?: string
+    model: string
+    at: string
+  }
+  status: 'pending' | 'applied' | 'dismissed'
+  decision?: string
+  decided_at?: string
+}
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(path)
   if (!res.ok) throw new Error(`${path}: ${res.status}`)
@@ -39,6 +61,15 @@ export const api = {
   events: (after: number) => get<GateEvent[]>(`/api/events?after=${after}`),
   agents: () => get<Agent[]>('/api/agents'),
   config: () => get<Config>('/api/config'),
+  reviews: () => get<Review[]>('/api/reviews'),
+  decide: async (id: string, action: 'apply' | 'dismiss', value?: string) => {
+    const res = await fetch(`/api/reviews/${encodeURIComponent(id)}/decision`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, value }),
+    })
+    if (!res.ok) throw new Error(`decision: ${res.status} ${await res.text()}`)
+  },
   reset: async (id: string) => {
     const res = await fetch(`/api/agents/${encodeURIComponent(id)}/reset`, { method: 'POST' })
     if (!res.ok) throw new Error(`reset: ${res.status}`)

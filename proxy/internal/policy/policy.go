@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/vault"
 )
@@ -27,6 +28,7 @@ const (
 )
 
 type Policy struct {
+	mu      sync.RWMutex
 	Tools   map[string]Sink `json:"tools"`
 	Default Sink            `json:"default"`
 }
@@ -51,10 +53,45 @@ func Load(path string) (*Policy, error) {
 }
 
 func (p *Policy) SinkFor(tool string) Sink {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	if s, ok := p.Tools[tool]; ok {
 		return s
 	}
 	return p.Default
+}
+
+// Has reports whether the tool has an explicit rule.
+func (p *Policy) Has(tool string) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	_, ok := p.Tools[tool]
+	return ok
+}
+
+// Set adds or changes a rule at runtime (after a human approves a review).
+func (p *Policy) Set(tool string, sink Sink) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.Tools == nil {
+		p.Tools = map[string]Sink{}
+	}
+	p.Tools[tool] = sink
+}
+
+// Snapshot is a copy that is safe to serialize.
+func (p *Policy) Snapshot() map[string]any {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	tools := make(map[string]Sink, len(p.Tools))
+	for k, v := range p.Tools {
+		tools[k] = v
+	}
+	return map[string]any{"tools": tools, "default": p.Default}
+}
+
+func ValidSink(s string) bool {
+	return s == string(Local) || s == string(Network) || s == string(Deny)
 }
 
 // Decide returns the action for a tool call and whether vault placeholders in
