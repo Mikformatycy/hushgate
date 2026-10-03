@@ -1,0 +1,94 @@
+# Simulated company network, fully offline:
+#   docker compose -f docker-compose.corp.yml up -d --build
+# Laptops have no ANTHROPIC_BASE_URL. Their only way out is the gate's
+# TLS-inspecting forward proxy; the "internet" network holds fake hosts.
+name: provenance-corp
+
+services:
+  certs:
+    image: alpine:3.20
+    command: sh /scripts/gen-certs.sh
+    volumes:
+      - certs:/certs
+      - ./demo/corp/gen-certs.sh:/scripts/gen-certs.sh:ro
+    networks: [mgmt]
+
+  internet:
+    build: { context: ., dockerfile: demo/corp/internet.Dockerfile }
+    volumes: [certs:/certs:ro]
+    networks:
+      internet:
+        aliases: [api.anthropic.com, llm.sketchy-vps.example, news.example]
+    depends_on:
+      certs: { condition: service_completed_successfully }
+
+  gate:
+    build: ./proxy
+    environment:
+      VAULT_ENV_FILES: /vault/.env
+      POLICY_FILE: /etc/gate/policy.json
+      REDIS_ADDR: redis:6379
+      TOKEN_LIMIT: 200000
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-demo-admin-token}
+      CA_CERT_FILE: /certs/corp-ca.crt
+      CA_KEY_FILE: /certs/corp-ca.key
+      UPSTREAM_CA_FILES: /certs/internet-ca.crt
+      NODES_FILE: /etc/gate/nodes.json
+      APPROVED_LLM_HOSTS: api.anthropic.com
+    volumes:
+      - certs:/certs:ro
+      - ./demo/workspace/.env:/vault/.env:ro
+      - ./proxy/policy.json:/etc/gate/policy.json:ro
+      - ./demo/corp/nodes.json:/etc/gate/nodes.json:ro
+    networks: [corpnet, internet, backend, mgmt]
+    depends_on:
+      certs: { condition: service_completed_successfully }
+      internet: { condition: service_started }
+      redis: { condition: service_started }
+
+  redis:
+    image: redis:7-alpine
+    networks: [backend]
+
+  dashboard:
+    build: ./dashboard
+    environment:
+      GATE_ADMIN_URL: http://gate:8081
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-demo-admin-token}
+    ports:
+      - "${DASHBOARD_PORT:-3000}:80"
+    networks: [mgmt]
+    depends_on: [gate]
+
+  # Enrolled employee laptop: on the allowlist.
+  jdoe-macbook:
+    build: { context: ., dockerfile: demo/corp/laptop.Dockerfile }
+    hostname: jdoe-macbook
+    container_name: jdoe-macbook
+    env_file: demo/corp/mdm/jdoe-macbook.env
+    volumes:
+      - certs:/certs:ro
+      - ./demo/workspace:/workspace
+    networks: [corpnet]
+    depends_on: [gate]
+
+  # On the network, trusts the CA, but not registered as an agent node.
+  guest-laptop:
+    build: { context: ., dockerfile: demo/corp/laptop.Dockerfile }
+    hostname: guest-laptop
+    container_name: guest-laptop
+    env_file: demo/corp/mdm/guest-laptop.env
+    volumes:
+      - certs:/certs:ro
+      - ./demo/workspace:/workspace
+    networks: [corpnet]
+    depends_on: [gate]
+
+networks:
+  corpnet: { internal: true }
+  internet: { internal: true }
+  backend: { internal: true }
+  mgmt: {}
+
+volumes:
+  certs:

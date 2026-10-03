@@ -3,7 +3,7 @@ import { api, type Agent, type Config, type GateEvent } from './api'
 import { EventStatus, Meter, Mono, Panel, Status, Table, Td, TierBadge, eventMessage, time } from './ui'
 import { useGate } from './useGate'
 
-const pages = ['Dashboard', 'Agents', 'Audit log', 'Vault', 'Policy'] as const
+const pages = ['Dashboard', 'Agents', 'Nodes', 'Audit log', 'Vault', 'Policy'] as const
 type Page = (typeof pages)[number]
 
 const pageFromHash = (): Page =>
@@ -92,6 +92,7 @@ export default function App() {
 
           {page === 'Dashboard' && <Dashboard events={events} agents={agents} onReset={refreshAgents} />}
           {page === 'Agents' && <Agents agents={agents} onReset={refreshAgents} />}
+          {page === 'Nodes' && <Nodes config={config} events={events} />}
           {page === 'Audit log' && <AuditLog events={events} />}
           {page === 'Vault' && <Vault config={config} />}
           {page === 'Policy' && <Policy config={config} />}
@@ -109,6 +110,8 @@ function Dashboard({ events, agents, onReset }: { events: GateEvent[]; agents: A
       blocked: calls.filter((e) => e.action === 'block').length,
       killed: calls.filter((e) => e.action === 'kill').length,
       masked: events.filter((e) => e.kind === 'mask').reduce((n, e) => n + (e.tokens?.length ?? 0), 0),
+      shadow: events.filter((e) => e.kind === 'shadow_ai').length,
+      unknown: events.filter((e) => e.kind === 'node_blocked').length,
     }
   }, [events])
   const halted = agents.filter((a) => a.killed).length
@@ -117,7 +120,7 @@ function Dashboard({ events, agents, onReset }: { events: GateEvent[]; agents: A
 
   return (
     <>
-      <div className="mb-5 grid grid-cols-2 gap-5 lg:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-5 lg:grid-cols-5">
         <Metric label="Agents" value={agents.length}>
           <Status tone="ok">{agents.length - halted} running</Status>
           {halted > 0 && <Status tone="bad">{halted} halted</Status>}
@@ -126,6 +129,10 @@ function Dashboard({ events, agents, onReset }: { events: GateEvent[]; agents: A
           <Status tone="ok">{stats.allowed} allowed</Status>
           <Status tone="warn">{stats.blocked} blocked</Status>
           <Status tone="bad">{stats.killed} killed</Status>
+        </Metric>
+        <Metric label="LLM traffic blocked" value={stats.shadow + stats.unknown}>
+          <Status tone="bad">{stats.shadow} shadow AI</Status>
+          <Status tone="bad">{stats.unknown} unknown device</Status>
         </Metric>
         <Metric label="Secrets masked" value={stats.masked}>
           <span className="text-gray-500">placeholders sent instead of real values</span>
@@ -193,7 +200,9 @@ function Agents({ agents, onReset }: { agents: Agent[]; onReset: () => void }) {
 const filters: Record<string, (e: GateEvent) => boolean> = {
   'All events': () => true,
   'Tool calls': (e) => e.kind === 'tool_call',
-  'Blocked and killed': (e) => (e.kind === 'tool_call' && e.action !== 'allow') || e.kind === 'denied',
+  'Blocked and killed': (e) =>
+    (e.kind === 'tool_call' && e.action !== 'allow') || ['denied', 'shadow_ai', 'node_blocked'].includes(e.kind),
+  'Network (shadow AI, devices)': (e) => e.kind === 'shadow_ai' || e.kind === 'node_blocked',
   Masking: (e) => e.kind === 'mask',
   Usage: (e) => e.kind === 'usage',
 }
@@ -276,6 +285,56 @@ const sinkInfo = {
   network: { tone: 'warn', label: 'Network', text: 'Allowed without secrets. A vault placeholder in its arguments fires the kill switch.' },
   deny: { tone: 'bad', label: 'Denied', text: 'Always blocked.' },
 } as const
+
+function Nodes({ config, events }: { config: Config | null; events: GateEvent[] }) {
+  if (!config) return null
+  const nodes = config.nodes ?? []
+  const lastSeen = (id: string) => [...events].reverse().find((e) => e.agent === id)
+  const blocked = new Map<string, GateEvent>()
+  for (const e of events) if (e.kind === 'node_blocked') blocked.set(e.agent, e)
+  return (
+    <>
+      <Panel title={`Allowlisted nodes (${nodes.length})`}>
+        <p className="px-5 py-3 text-gray-600">
+          Devices and workloads allowed to reach LLM providers. Identity comes from the device (MDM credentials or
+          certificate), not from anything the agent says about itself.
+        </p>
+        <Table head={['Node', 'Owner', 'Status', 'Last activity']} empty="No allowlist configured.">
+          {nodes.map((n) => {
+            const e = lastSeen(n.id)
+            return (
+              <tr key={n.id}>
+                <Td className="font-medium whitespace-nowrap">{n.id}</Td>
+                <Td>{n.owner}</Td>
+                <Td>
+                  <Status tone="ok">Allowlisted</Status>
+                </Td>
+                <Td className="text-gray-600">{e ? time(e.time) : 'Not seen yet'}</Td>
+              </tr>
+            )
+          })}
+        </Table>
+      </Panel>
+      <Panel title={`Blocked devices (${blocked.size})`}>
+        <p className="px-5 py-3 text-gray-600">
+          Devices that sent LLM traffic without being on the allowlist. Ordinary web traffic from them is not affected.
+        </p>
+        <Table head={['Device', 'Last attempt', 'Destination', 'Detected by']} empty="No unknown devices have tried to use an LLM.">
+          {[...blocked.values()].reverse().map((e) => (
+            <tr key={e.agent} className="bg-red-50">
+              <Td className="font-medium whitespace-nowrap">{e.agent.replace('unregistered: ', '')}</Td>
+              <Td className="font-mono text-xs whitespace-nowrap text-gray-600">{time(e.time)}</Td>
+              <Td>
+                <Mono>{e.host}</Mono>
+              </Td>
+              <Td className="text-gray-700">{e.reason?.match(/\(([^)]*)\)$/)?.[1]}</Td>
+            </tr>
+          ))}
+        </Table>
+      </Panel>
+    </>
+  )
+}
 
 function Policy({ config }: { config: Config | null }) {
   if (!config) return null

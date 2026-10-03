@@ -1,0 +1,6 @@
+{
+  "nodes": [
+    { "id": "jdoe-macbook", "owner": "Jane Doe, Payments engineering", "token": "dev-7f3a9c1e" },
+    { "id": "ci-runner-01", "owner": "Build farm, payments-api pipeline", "token": "dev-c19e04b2" }
+  ]
+}

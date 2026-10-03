@@ -3,6 +3,9 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -14,6 +17,7 @@ import (
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/admin"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/audit"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/budget"
+	"github.com/Mikformatycy/goldman-sachs/proxy/internal/forward"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/gateway"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/policy"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/vault"
@@ -68,20 +72,44 @@ func main() {
 	ring := audit.NewRing(2000)
 	logger := audit.Multi{audit.NewJSONLogger(os.Stdout), ring}
 
+	transport, err := upstreamTransport(os.Getenv("UPSTREAM_CA_FILES"))
+	if err != nil {
+		log.Fatalf("UPSTREAM_CA_FILES: %v", err)
+	}
+
 	gw := &gateway.Gateway{
 		Upstream:    upstream,
 		UpstreamKey: os.Getenv("UPSTREAM_API_KEY"),
 		TokenLimit:  limit,
-		Client:      &http.Client{},
+		Client:      &http.Client{Transport: transport},
 		Vault:       v,
 		Policy:      pol,
 		Budget:      store,
 		Audit:       logger,
 	}
 
+	nodes, err := forward.LoadNodes(os.Getenv("NODES_FILE"))
+	if err != nil {
+		log.Fatalf("NODES_FILE: %v", err)
+	}
+	if caCert := os.Getenv("CA_CERT_FILE"); caCert != "" {
+		fp, err := forward.New(caCert, os.Getenv("CA_KEY_FILE"))
+		if err != nil {
+			log.Fatal(err)
+		}
+		fp.Nodes, fp.Gateway, fp.Transport, fp.Audit = nodes, gw, transport, logger
+		fp.Approved = map[string]bool{}
+		for _, h := range strings.Split(env("APPROVED_LLM_HOSTS", "api.anthropic.com"), ",") {
+			fp.Approved[strings.TrimSpace(h)] = true
+		}
+		fwdAddr := env("FORWARD_ADDR", ":3128")
+		log.Printf("forward proxy (TLS inspection) listening on %s, %d nodes allowlisted", fwdAddr, len(nodes.List()))
+		go func() { log.Fatal(http.ListenAndServe(fwdAddr, fp)) }()
+	}
+
 	if token := os.Getenv("ADMIN_TOKEN"); token != "" {
 		api := &admin.API{Token: token, Events: ring, Budget: store, Audit: logger,
-			Vars: allVars, MaskFrom: maskFrom, Policy: pol, TokenLimit: limit}
+			Vars: allVars, MaskFrom: maskFrom, Policy: pol, TokenLimit: limit, Nodes: nodes.List()}
 		adminAddr := env("ADMIN_ADDR", ":8081")
 		log.Printf("admin api listening on %s", adminAddr)
 		go func() { log.Fatal(http.ListenAndServe(adminAddr, api.Handler())) }()
@@ -92,6 +120,31 @@ func main() {
 	addr := env("LISTEN_ADDR", ":8080")
 	log.Printf("provenance gate listening on %s -> %s", addr, upstream)
 	log.Fatal(http.ListenAndServe(addr, gw))
+}
+
+// upstreamTransport trusts the system roots plus any extra CA files (the demo
+// "internet" CA stands in for public CAs).
+func upstreamTransport(caFiles string) (*http.Transport, error) {
+	pool, err := x509.SystemCertPool()
+	if err != nil {
+		pool = x509.NewCertPool()
+	}
+	for _, f := range strings.Split(caFiles, ",") {
+		if f = strings.TrimSpace(f); f == "" {
+			continue
+		}
+		pem, err := os.ReadFile(f)
+		if err != nil {
+			return nil, err
+		}
+		if !pool.AppendCertsFromPEM(pem) {
+			return nil, fmt.Errorf("no certificates in %s", f)
+		}
+	}
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.Proxy = nil
+	t.TLSClientConfig = &tls.Config{RootCAs: pool}
+	return t, nil
 }
 
 func env(k, def string) string {

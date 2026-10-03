@@ -114,6 +114,10 @@ export function EventStatus({ e }: { e: GateEvent }) {
       return <Status tone="bad">Denied</Status>
     case 'reset':
       return <Status tone="info">Reset</Status>
+    case 'shadow_ai':
+      return <Status tone="bad">Shadow AI</Status>
+    case 'node_blocked':
+      return <Status tone="bad">Unknown device</Status>
     default:
       return <Status tone="muted">Usage</Status>
   }
@@ -145,6 +149,13 @@ export function eventMessage(e: GateEvent): ReactNode {
       return <>Total {e.usage?.toLocaleString()} tokens</>
     case 'denied':
       return <>Request refused — {e.reason}</>
+    case 'shadow_ai':
+    case 'node_blocked':
+      return (
+        <>
+          <Mono>{e.host}</Mono> — {e.reason}
+        </>
+      )
     default:
       return <>{e.reason}</>
   }

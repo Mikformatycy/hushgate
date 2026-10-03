@@ -13,7 +13,8 @@ type Event struct {
 	ID     int64     `json:"id"`
 	Time   time.Time `json:"time"`
 	Agent  string    `json:"agent"`
-	Kind   string    `json:"kind"` // request | mask | tool_call | usage | denied
+	Kind   string    `json:"kind"` // mask | tool_call | usage | denied | reset | shadow_ai | node_blocked
+	Host   string    `json:"host,omitempty"`
 	Tool   string    `json:"tool,omitempty"`
 	ToolID string    `json:"tool_id,omitempty"`
 	Action string    `json:"action,omitempty"`

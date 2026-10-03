@@ -2,7 +2,8 @@ export type GateEvent = {
   id: number
   time: string
   agent: string
-  kind: 'mask' | 'tool_call' | 'usage' | 'denied' | 'reset'
+  kind: 'mask' | 'tool_call' | 'usage' | 'denied' | 'reset' | 'shadow_ai' | 'node_blocked'
+  host?: string
   tool?: string
   tool_id?: string
   action?: 'allow' | 'block' | 'kill'
@@ -24,6 +25,7 @@ export type Config = {
   mask_from: string
   policy: { default: string; tools: Record<string, 'local' | 'network' | 'deny'> }
   token_limit: number
+  nodes: { id: string; owner: string }[] | null
 }
 
 async function get<T>(path: string): Promise<T> {
