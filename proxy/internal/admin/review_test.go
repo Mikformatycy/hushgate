@@ -2,6 +2,7 @@ package admin
 
 import (
 	"encoding/json"
+	"github.com/Mikformatycy/hushgate/proxy/internal/metrics"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -142,5 +143,57 @@ func TestScanResultsRaiseAlertsOnly(t *testing.T) {
 	}
 	if st, _ := api.Budget.Status(t.Context(), "jdoe"); st.Killed {
 		t.Fatal("an injection alert must not kill or block")
+	}
+}
+
+func TestAuditExport(t *testing.T) {
+	api, _ := reviewAPI(t)
+	h := api.Handler()
+	api.Audit.Record(audit.Event{Agent: "jdoe", Kind: "tool_call", Tool: "Bash", Action: "kill", Reason: "Bash guard: curl",
+		Tokens: []string{"{{VAULT_ENV_DB_PASSWORD}}"}})
+	api.Audit.Record(audit.Event{Agent: "jdoe", Kind: "tool_call", Tool: "Read", Action: "allow", Reason: "local tool"})
+	api.Audit.Record(audit.Event{Agent: "guest", Kind: "shadow_ai", Host: "llm.vps.example", Reason: "openai, request"})
+
+	csv := do(h, "GET", "/api/audit/export?format=csv&blocked=1", "admin", "")
+	body := csv.Body.String()
+	if csv.Code != 200 || !strings.Contains(csv.Header().Get("Content-Disposition"), ".csv") {
+		t.Fatalf("csv export: %d %v", csv.Code, csv.Header())
+	}
+	if !strings.HasPrefix(body, "time,agent,kind,action,tool,host,reason,placeholders,usage\n") ||
+		!strings.Contains(body, "{{VAULT_ENV_DB_PASSWORD}}") || !strings.Contains(body, `"openai, request"`) {
+		t.Fatalf("csv body:\n%s", body)
+	}
+	if strings.Contains(body, "local tool") {
+		t.Fatal("blocked=1 kept an allowed call")
+	}
+
+	jl := do(h, "GET", "/api/audit/export?format=jsonl&agent=guest", "admin", "")
+	if lines := strings.Split(strings.TrimSpace(jl.Body.String()), "\n"); len(lines) != 1 || !strings.Contains(lines[0], "shadow_ai") {
+		t.Fatalf("jsonl agent filter: %q", jl.Body.String())
+	}
+	if rec := do(h, "GET", "/api/audit/export", "advisor", ""); rec.Code != http.StatusNotFound {
+		t.Fatalf("advisor can export: %d", rec.Code)
+	}
+}
+
+func TestMetricsEndpointAuth(t *testing.T) {
+	api, _ := reviewAPI(t)
+	api.Metrics = metrics.New()
+	api.MetricsToken = "scrape"
+	api.Metrics.Record(audit.Event{Kind: "tool_call", Tool: "Bash", Action: "kill"})
+	h := api.Handler()
+
+	if rec := do(h, "GET", "/metrics", "", ""); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous scrape: %d", rec.Code)
+	}
+	rec := do(h, "GET", "/metrics", "scrape", "")
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `hushgate_tool_calls_total{action="kill",tool="Bash"} 1`) {
+		t.Fatalf("scrape: %d\n%.400s", rec.Code, rec.Body.String())
+	}
+	if rec := do(h, "GET", "/api/events", "scrape", ""); rec.Code != http.StatusNotFound {
+		t.Fatalf("metrics token reached the admin API: %d", rec.Code)
+	}
+	if rec := do(h, "GET", "/metrics", "admin", ""); rec.Code != 200 {
+		t.Fatalf("admin scrape: %d", rec.Code)
 	}
 }
