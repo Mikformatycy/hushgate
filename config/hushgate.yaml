@@ -1,0 +1,74 @@
+# HushGate policy: every control a security team tunes, in one place.
+#
+# The gate reloads this file within a second of saving. Each change shows up
+# on the dashboard as "Policy reloaded" with exactly what changed. An invalid
+# edit (typo in a key, unknown value) is rejected and the previous policy
+# stays active. Decisions made on the Review page are written back here.
+
+# What each tool the model calls is allowed to do.
+#   local:   effects stay on the machine; vaulted values are restored in its arguments
+#   network: data leaves the machine; vaulted values in its arguments trigger masking.on_network_tool
+#   deny:    always blocked
+tools:
+  default: deny # tools not listed below
+  rules:
+    # demo agent
+    read_file: local
+    write_file: local
+    send_email: network
+    http_request: network
+    # Claude Code
+    Read: local
+    Write: local
+    Edit: local
+    Glob: local
+    Grep: local
+    Bash: local
+    TodoWrite: local
+    WebFetch: network
+    WebSearch: network
+
+# Confidentiality tiers: C0 public, C1 internal, C2 confidential / personal data, C3 secret.
+masking:
+  mask_from: C2 # values at this tier or higher never reach the LLM provider
+  # What happens when vaulted data of a tier shows up in a network tool call:
+  #   allow, block (drop the call), kill (drop the call and halt the agent)
+  on_network_tool:
+    C2: block
+    C3: kill
+
+vault:
+  # .env files whose values are protected (paths inside the gate container).
+  env_files:
+    - /vault/.env
+  # Force a tier for a variable, overriding the classification rules.
+  overrides: {}
+
+# Token budgets per agent (X-Agent-Id header or device id). 0 = unlimited.
+budgets:
+  default_tokens: 200000
+  agents:
+    my-claude-code: 5000000
+
+# Models agents may call, as glob patterns. An empty list allows every model.
+models:
+  allow:
+    - claude-*
+
+# LLM providers registered devices may reach in company network mode.
+llm_hosts:
+  approved:
+    - api.anthropic.com
+
+injection:
+  alert_threshold: 0.8 # AI advisor score (0-1) above which a prompt injection warning is raised
+
+# Devices allowed to use AI in company network mode. In production the
+# identity comes from a device certificate; here, from proxy credentials.
+nodes:
+  - id: jdoe-macbook
+    owner: Jane Doe, Payments engineering
+    token: dev-7f3a9c1e
+  - id: ci-runner-01
+    owner: Build farm, payments-api pipeline
+    token: dev-c19e04b2

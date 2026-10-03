@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/Mikformatycy/hushgate/proxy/internal/audit"
@@ -18,9 +19,22 @@ import (
 	"github.com/Mikformatycy/hushgate/proxy/internal/vault"
 )
 
-type nopAudit struct{ events []audit.Event }
+type nopAudit struct {
+	mu     sync.Mutex
+	events []audit.Event
+}
 
-func (n *nopAudit) Record(e audit.Event) { n.events = append(n.events, e) }
+func (n *nopAudit) Record(e audit.Event) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.events = append(n.events, e)
+}
+
+func (n *nopAudit) all() []audit.Event {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return append([]audit.Event(nil), n.events...)
+}
 
 // sse builds a stream where the model calls `tool` with input split across deltas.
 func sse(tool, input string) string {
@@ -112,7 +126,7 @@ func TestExfiltrationKills(t *testing.T) {
 		t.Fatal("agent should be killed")
 	}
 	var sawKill bool
-	for _, e := range log.events {
+	for _, e := range log.all() {
 		sawKill = sawKill || (e.Kind == "tool_call" && e.Action == "kill")
 	}
 	if !sawKill {
@@ -209,5 +223,40 @@ func TestToolResultsQueuedForScan(t *testing.T) {
 	}
 	if strings.Contains(p[0].Text, "hunter2-real") || !strings.Contains(p[0].Text, "{{VAULT_ENV_DB_PASSWORD}}") {
 		t.Fatalf("scan text must be masked: %q", p[0].Text)
+	}
+}
+
+func TestModelAllowlistAndPerAgentBudget(t *testing.T) {
+	srv, store, log, _ := setup(t, sse("write_file", `{}`))
+	gw := srv.Config.Handler.(*Gateway)
+	gw.ModelOK = func(m string) bool { return strings.HasPrefix(m, "claude-haiku") }
+	gw.Limits = func(agent string) int64 { return map[string]int64{"a1": 50}[agent] }
+
+	call := func(model string) int {
+		req, _ := http.NewRequest("POST", srv.URL+"/v1/messages", strings.NewReader(`{"model":"`+model+`","stream":true}`))
+		req.Header.Set("X-Agent-Id", "a1")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	if code := call("claude-opus-5-5"); code != http.StatusForbidden {
+		t.Fatalf("disallowed model: %d", code)
+	}
+	var blocked bool
+	for _, e := range log.all() {
+		blocked = blocked || (e.Kind == "model_blocked" && e.Tool == "claude-opus-5-5")
+	}
+	if !blocked {
+		t.Fatal("model block not audited")
+	}
+	if code := call("claude-haiku-4-5"); code != http.StatusOK {
+		t.Fatalf("allowed model: %d", code)
+	}
+	store.AddUsage(t.Context(), "a1", 100) // over a1's 50-token budget
+	if code := call("claude-haiku-4-5"); code != http.StatusForbidden {
+		t.Fatalf("per-agent budget not enforced: %d", code)
 	}
 }

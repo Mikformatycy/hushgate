@@ -24,6 +24,8 @@ export function useGate() {
         if (!alive || fresh.length === 0) return
         lastId.current = fresh[fresh.length - 1].id
         setEvents((prev) => [...prev, ...fresh].slice(-MAX_EVENTS))
+        // The policy file was reloaded or an edit was rejected: refresh what the pages show.
+        if (fresh.some((e) => e.kind === 'policy')) api.config().then((c) => alive && setConfig(c))
       } catch (e) {
         if (alive) setError(String(e))
       } finally {

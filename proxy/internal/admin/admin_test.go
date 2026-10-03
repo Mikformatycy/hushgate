@@ -8,16 +8,14 @@ import (
 	"testing"
 
 	"github.com/Mikformatycy/hushgate/proxy/internal/audit"
-	"github.com/Mikformatycy/hushgate/proxy/internal/budget"
-	"github.com/Mikformatycy/hushgate/proxy/internal/policy"
 )
 
 func TestAPI(t *testing.T) {
-	ring := audit.NewRing(10)
-	store := budget.NewMemory()
+	api, _ := newAPI(t, "budgets:\n  default_tokens: 100\n", "")
+	api.Token = "t"
+	store := api.Budget
 	store.AddUsage(context.Background(), "a1", 42)
 	store.Kill(context.Background(), "a1", "send_email: leak")
-	api := &API{Token: "t", Events: ring, Budget: store, Audit: ring, Policy: &policy.Policy{}, TokenLimit: 100}
 	h := api.Handler()
 
 	do := func(method, path, token string) *httptest.ResponseRecorder {

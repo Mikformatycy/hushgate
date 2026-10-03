@@ -56,16 +56,22 @@ The advisor sees tool definitions and the *shape* of a variable's value (`paymen
 
 ## Controls
 
+All controls are configured in `config/hushgate.yaml`:
+
 | Control | Type | Configured in |
 |---|---|---|
-| Secret and PII masking, tiers C0–C3 | Deterministic: name rules, known formats, checksums, entropy | `demo/workspace/.env` (`# @class: C3` overrides), `MASK_FROM_TIER` |
-| Tool policy: local / network / deny | Deterministic | `proxy/policy.json` |
-| Kill switch, token budgets | Deterministic | `TOKEN_LIMIT` |
-| Device allowlist, approved LLM hosts | Deterministic | `demo/corp/nodes.json`, `APPROVED_LLM_HOSTS` |
+| Secret and PII masking, tiers C0–C3 | Deterministic: name rules, known formats, checksums, entropy | `masking`, `vault` (and `# @class: C3` in the `.env`) |
+| Tool policy: local / network / deny | Deterministic | `tools` |
+| Block or kill per tier when data reaches a network tool | Deterministic | `masking.on_network_tool` |
+| Token budgets, per agent | Deterministic | `budgets` |
+| Allowed models | Deterministic (glob patterns) | `models.allow` |
+| Device allowlist, approved LLM hosts | Deterministic | `nodes`, `llm_hosts` |
 | LLM traffic detection on any host | Deterministic: paths, headers, body shape | built in (`proxy/internal/detect`) |
 | Egress lockdown | Network (Docker internal networks) | `docker-compose*.yml` |
 | Review suggestions | AI (Jev), advisory | `TYPESAFE_API_KEY` |
-| Prompt injection warning | AI (Jev), alert only | `TYPESAFE_API_KEY`, `INJECTION_ALERT_THRESHOLD` |
+| Prompt injection warning | AI (Jev), alert only | `injection.alert_threshold` (needs `TYPESAFE_API_KEY`) |
+
+Everything in the right-hand column lives in one file, [`config/hushgate.yaml`](config/hushgate.yaml). The gate reloads it within a second of saving and logs exactly what changed; an invalid edit is rejected and the previous policy stays active. Decisions made on the Review page are written back into the file.
 
 ## Where it can run
 
@@ -77,7 +83,7 @@ Deep inspection (masking, tool policy, budgets) covers the Anthropic Messages AP
 
 ## Testing
 
-28 automated tests cover allowed and blocked cases for every control, including false positives:
+36 automated tests cover allowed and blocked cases for every control, including false positives:
 
 ```sh
 docker run --rm -v "$PWD/proxy":/src -w /src golang:1.26-alpine go test ./...
@@ -95,6 +101,5 @@ demo/        fake model, demo workspace, company network simulation
 
 ## Current limitations
 
-- Audit events, review decisions and the injection queue live in memory and are lost on restart; budgets and kills persist in Redis.
-- Configuration is read at startup; restart the gate after editing it. Review decisions apply live.
+- Audit events and the review and injection queues live in memory and are lost on restart; budgets and kills persist in Redis, and review decisions persist in the policy file.
 - Budgets are counted in tokens, not currency.

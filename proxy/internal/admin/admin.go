@@ -15,7 +15,7 @@ import (
 
 	"github.com/Mikformatycy/hushgate/proxy/internal/audit"
 	"github.com/Mikformatycy/hushgate/proxy/internal/budget"
-	"github.com/Mikformatycy/hushgate/proxy/internal/forward"
+	"github.com/Mikformatycy/hushgate/proxy/internal/config"
 	"github.com/Mikformatycy/hushgate/proxy/internal/policy"
 	"github.com/Mikformatycy/hushgate/proxy/internal/review"
 	"github.com/Mikformatycy/hushgate/proxy/internal/scan"
@@ -32,9 +32,7 @@ type API struct {
 	Policy       *policy.Policy
 	Reviews      *review.Store
 	Scans        *scan.Store
-	InjectionAt  float64 // alert threshold for scan results
-	TokenLimit   int64
-	Nodes        []forward.Node
+	Live         *config.Live // the policy file: thresholds, budgets, nodes; decisions are written back to it
 }
 
 type agentView struct {
@@ -145,7 +143,7 @@ func (a *API) scanResult(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	}
-	if req.Injection >= a.InjectionAt {
+	if req.Injection >= *a.Live.Get().Injection.AlertThreshold {
 		a.Audit.Record(audit.Event{Agent: it.Agent, Kind: "injection", Tool: it.Source,
 			Reason: fmt.Sprintf("the content contains hidden instructions for an AI (%.0f%%, %s), flagged %d ms after the agent received it",
 				req.Injection*100, req.Model, time.Since(it.ObservedAt).Milliseconds())})
@@ -189,34 +187,32 @@ func (a *API) decide(w http.ResponseWriter, r *http.Request) {
 			note += ", AI suggested " + sg.Value
 		}
 	}
-	// Validate the value before recording the decision.
-	var tier vault.Tier
-	switch current.Kind {
-	case "tool":
-		if !policy.ValidSink(req.Value) {
-			http.Error(w, "invalid sink", http.StatusBadRequest)
-			return
-		}
-	case "variable":
-		t, ok := vault.ParseTier(req.Value)
-		if !ok {
-			http.Error(w, "invalid tier", http.StatusBadRequest)
-			return
-		}
-		tier = t
-	}
-	it, err := a.Reviews.Resolve(id, "applied", req.Value)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusConflict)
+	if (current.Kind == "tool" && !policy.ValidSink(req.Value)) ||
+		(current.Kind == "variable" && !validTier(req.Value)) {
+		http.Error(w, "invalid value "+req.Value, http.StatusBadRequest)
 		return
 	}
-	switch it.Kind {
-	case "tool":
-		a.Policy.Set(it.Subject, policy.Sink(req.Value))
-	case "variable":
-		a.Vault.SetTier(it.Subject, tier, note)
+	if current.Status != "pending" {
+		http.Error(w, "review "+id+" is already "+current.Status, http.StatusConflict)
+		return
 	}
-	a.Audit.Record(audit.Event{Agent: "reviewer", Kind: "review", Tool: it.Subject, Action: req.Value, Reason: note})
+	// The decision becomes a rule in the policy file, so it survives restarts
+	// and the file stays the single source of truth. The reload that follows
+	// applies it and settles this review.
+	var err error
+	if current.Kind == "tool" {
+		err = a.Live.SetToolRule(current.Subject, req.Value)
+	} else {
+		err = a.Live.SetVariableOverride(current.Subject, req.Value)
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	a.Reviews.Settle(id, req.Value)
+	it, _ := a.Reviews.Get(id)
+	a.Audit.Record(audit.Event{Agent: "reviewer", Kind: "review", Tool: it.Subject, Action: req.Value,
+		Reason: note + "; written to hushgate.yaml"})
 	writeJSON(w, it)
 }
 
@@ -238,7 +234,8 @@ func (a *API) agents(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusServiceUnavailable)
 			return
 		}
-		out = append(out, agentView{ID: id, Used: st.Used, Limit: a.TokenLimit, Killed: st.Killed, KillReason: st.KillReason})
+		out = append(out, agentView{ID: id, Used: st.Used, Limit: a.Live.Get().LimitFor(id), Killed: st.Killed,
+			KillReason: st.KillReason})
 	}
 	writeJSON(w, out)
 }
@@ -267,7 +264,23 @@ func (a *API) config(w http.ResponseWriter, r *http.Request) {
 			detectors = append(detectors, detectorView{Name: d.Name, Tier: d.Tier.String(), Check: d.Check})
 		}
 	}
-	writeJSON(w, map[string]any{"vault": vars, "mask_from": a.Vault.MaskFrom().String(), "policy": a.Policy.Snapshot(), "token_limit": a.TokenLimit, "nodes": a.Nodes, "detectors": detectors})
+	cfg := a.Live.Get()
+	nodes := make([]map[string]string, 0, len(cfg.Nodes))
+	for _, n := range cfg.Nodes {
+		nodes = append(nodes, map[string]string{"id": n.ID, "owner": n.Owner}) // never the token
+	}
+	writeJSON(w, map[string]any{
+		"vault": vars, "mask_from": a.Vault.MaskFrom().String(), "policy": a.Policy.Snapshot(),
+		"token_limit": cfg.Budgets.DefaultTokens, "budgets": cfg.Budgets.Agents,
+		"models": cfg.Models.Allow, "llm_hosts": cfg.LLMHosts.Approved,
+		"injection_threshold": *cfg.Injection.AlertThreshold,
+		"nodes":               nodes, "detectors": detectors, "policy_file": a.Live.Status(),
+	})
+}
+
+func validTier(s string) bool {
+	_, ok := vault.ParseTier(s)
+	return ok
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

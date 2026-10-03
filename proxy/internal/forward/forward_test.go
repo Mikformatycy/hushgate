@@ -85,9 +85,9 @@ func setup(t *testing.T) (proxyURL *url.URL, upstream *httptest.Server, fp *Prox
 	v := vault.New(vault.Confidential)
 	v.Add("DB_PASSWORD", "hunter2-real", vault.Secret)
 	rec = &recorder{}
-	fp.Nodes = &Registry{nodes: map[string]Node{"jdoe-laptop": {ID: "jdoe-laptop", Token: "s3cret"}}}
+	fp.Nodes = NewRegistry([]Node{{ID: "jdoe-laptop", Token: "s3cret"}})
 	fp.Transport, fp.Audit = transport, rec
-	fp.Approved = map[string]bool{"127.0.0.1": true}
+	fp.Approved = func(h string) bool { return h == "127.0.0.1" }
 	fp.Gateway = &gateway.Gateway{Client: &http.Client{Transport: transport}, Vault: v, Audit: rec,
 		Policy: &policy.Policy{Default: policy.Local}, Budget: budget.NewMemory()}
 
@@ -143,7 +143,7 @@ func TestApprovedNodeGoesThroughGateway(t *testing.T) {
 
 func TestShadowAIBlocked(t *testing.T) {
 	proxyURL, up, fp, rec, seen := setup(t)
-	fp.Approved = map[string]bool{"api.anthropic.com": true}
+	fp.Approved = func(h string) bool { return h == "api.anthropic.com" }
 	c := client(t, proxyURL, fp, url.UserPassword("jdoe-laptop", "s3cret"))
 	code, out := call(t, c, "POST", up.URL+"/v1/chat/completions", chat)
 	if code != 403 || !strings.Contains(out, "not an approved LLM provider") {
