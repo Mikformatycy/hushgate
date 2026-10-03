@@ -23,6 +23,8 @@ import (
 	"github.com/Mikformatycy/hushgate/proxy/internal/policy"
 	"github.com/Mikformatycy/hushgate/proxy/internal/review"
 	"github.com/Mikformatycy/hushgate/proxy/internal/scan"
+	"github.com/Mikformatycy/hushgate/proxy/internal/shell"
+	"github.com/Mikformatycy/hushgate/proxy/internal/signature"
 	"github.com/Mikformatycy/hushgate/proxy/internal/vault"
 )
 
@@ -49,15 +51,20 @@ func main() {
 	// Everything a security team tunes lives in one policy file, reloaded
 	// live. Environment variables only carry deployment settings.
 	eng := &engine.Engine{
-		Policy:  &policy.Policy{},
-		Vault:   vault.New(vault.Confidential),
-		Reviews: review.NewStore(),
-		Nodes:   forward.NewRegistry(nil),
+		Policy:     &policy.Policy{},
+		Vault:      vault.New(vault.Confidential),
+		Reviews:    review.NewStore(),
+		Nodes:      forward.NewRegistry(nil),
+		Guard:      shell.NewGuard(nil, nil),
+		Signatures: &signature.Set{},
+		Feeds:      signature.NewLoader(),
 	}
 	policyPath := env("HUSHGATE_POLICY", "/etc/hushgate/hushgate.yaml")
 	live := config.NewLive(policyPath, eng.Apply, func(action, detail string) {
 		logger.Record(audit.Event{Agent: "hushgate.yaml", Kind: "policy", Action: action, Reason: detail})
 	})
+	// Watch signature feeds too: a new local file or a newly fetched URL copy reloads.
+	live.Extra = func(c *config.Config) [][]byte { return eng.Feeds.Raw(c.Signatures.Feeds) }
 	if err := live.Load(); err != nil {
 		log.Fatalf("policy %s: %v", policyPath, err)
 	}
@@ -66,6 +73,14 @@ func main() {
 	}
 	log.Printf("policy %s loaded (version %s), watching for changes", policyPath, live.Status().Version)
 	go live.Watch(context.Background(), time.Second)
+	go func() { // fetch URL feeds when new or due; the watcher applies new copies
+		for {
+			cfg := live.Get()
+			eng.Feeds.FetchDue(context.Background(), cfg.Signatures.Feeds,
+				time.Duration(cfg.Signatures.RefreshSeconds)*time.Second)
+			time.Sleep(2 * time.Second)
+		}
+	}()
 
 	transport, err := upstreamTransport(os.Getenv("UPSTREAM_CA_FILES"))
 	if err != nil {
@@ -85,6 +100,8 @@ func main() {
 		Audit:       logger,
 		Reviews:     eng.Reviews,
 		Scans:       scans,
+		Guard:       eng.Guard,
+		Signatures:  eng.Signatures,
 	}
 
 	if caCert := os.Getenv("CA_CERT_FILE"); caCert != "" {
@@ -101,7 +118,8 @@ func main() {
 
 	if token := os.Getenv("ADMIN_TOKEN"); token != "" {
 		api := &admin.API{Token: token, AdvisorToken: os.Getenv("ADVISOR_TOKEN"), Events: ring, Budget: store,
-			Audit: logger, Vault: eng.Vault, Policy: eng.Policy, Reviews: eng.Reviews, Scans: scans, Live: live}
+			Audit: logger, Vault: eng.Vault, Policy: eng.Policy, Reviews: eng.Reviews, Scans: scans, Live: live,
+			Signatures: eng.Signatures}
 		adminAddr := env("ADMIN_ADDR", ":8081")
 		log.Printf("admin api listening on %s", adminAddr)
 		go func() { log.Fatal(http.ListenAndServe(adminAddr, api.Handler())) }()

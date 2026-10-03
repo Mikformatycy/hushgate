@@ -17,6 +17,8 @@ import (
 	"github.com/Mikformatycy/hushgate/proxy/internal/policy"
 	"github.com/Mikformatycy/hushgate/proxy/internal/review"
 	"github.com/Mikformatycy/hushgate/proxy/internal/scan"
+	"github.com/Mikformatycy/hushgate/proxy/internal/shell"
+	"github.com/Mikformatycy/hushgate/proxy/internal/signature"
 	"github.com/Mikformatycy/hushgate/proxy/internal/vault"
 )
 
@@ -35,6 +37,8 @@ type Gateway struct {
 	Audit       audit.Logger
 	Reviews     *review.Store // optional: queue tools that have no policy rule
 	Scans       *scan.Store   // optional: queue tool results for injection scanning
+	Guard       *shell.Guard  // optional: shell calls that reach the network count as network tools
+	Signatures  *signature.Set
 }
 
 var hopHeaders = map[string]bool{
@@ -278,7 +282,31 @@ func blockText(raw json.RawMessage) string {
 // and the (possibly rehydrated) JSON input to hand to the agent.
 func (g *Gateway) decideTool(ctx context.Context, agent, id, name, input string) (policy.Action, string, string) {
 	refs := g.Vault.Tokens(input)
-	act, rehydrate, reason := g.Policy.Decide(name, refs)
+	sink := g.Policy.SinkFor(name)
+	var guardNote, shellText string
+	if g.Guard != nil && g.Guard.IsShellTool(name) {
+		cmd := commandOf(input)
+		shellText = shell.Normalize(cmd)
+		if prog, ok := g.Guard.NetworkCommand(cmd); ok && sink == policy.Local {
+			sink = policy.Network
+			guardNote = "Bash guard: command runs " + prog + ", treated as a network tool; "
+		}
+	}
+	act, rehydrate, reason := g.Policy.DecideAs(sink, refs)
+	reason = guardNote + reason
+
+	// Known attack signatures can only make the decision stricter.
+	if g.Signatures != nil {
+		for _, h := range g.Signatures.Match(name, signature.Flatten(input), shellText) {
+			sig := h.Signature
+			g.Audit.Record(audit.Event{Agent: agent, Kind: "signature", Tool: name, ToolID: id, Action: sig.Action,
+				Reason: fmt.Sprintf("%s %s (%s, %s): matched %q", sig.ID, sig.Name, sig.Category, sig.Severity, h.Match)})
+			if sig.Action != "alert" && signature.Rank(sig.Action) > signature.Rank(string(act)) {
+				act, rehydrate = policy.Action(sig.Action), false
+				reason = fmt.Sprintf("signature %s: %s", sig.ID, sig.Name)
+			}
+		}
+	}
 	if act == policy.Kill {
 		if err := g.Budget.Kill(ctx, agent, fmt.Sprintf("%s: %s", name, reason)); err != nil {
 			log.Printf("kill %s: %v", agent, err)
@@ -290,6 +318,18 @@ func (g *Gateway) decideTool(ctx context.Context, agent, id, name, input string)
 		input = g.Vault.RehydrateJSON(input)
 	}
 	return act, input, reason
+}
+
+// commandOf returns the shell command of a shell tool call ("command" field,
+// as Claude Code's Bash tool sends it), or all its text otherwise.
+func commandOf(input string) string {
+	var in struct {
+		Command string `json:"command"`
+	}
+	if json.Unmarshal([]byte(input), &in) == nil && in.Command != "" {
+		return in.Command
+	}
+	return signature.Flatten(input)
 }
 
 // filterMessage handles non-streaming /v1/messages responses.

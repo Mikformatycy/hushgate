@@ -17,6 +17,7 @@ tools:
     write_file: local
     send_email: network
     http_request: network
+    run_command: local
     # Claude Code
     Read: local
     Write: local
@@ -59,6 +60,23 @@ models:
 llm_hosts:
   approved:
     - api.anthropic.com
+
+# Known attack patterns, checked against every tool call (see signatures.yaml).
+# A later feed overrides an earlier one per signature id.
+signatures:
+  feeds:
+    - /etc/hushgate/signatures.yaml # local baseline, always available
+    # Central feed published by the security team; every gate pulls it.
+    - https://raw.githubusercontent.com/Mikformatycy/hushgate/dev/config/signatures.yaml
+  refresh_seconds: 60
+  disabled: [] # signature ids to switch off, e.g. [HG-DESER-001]
+
+# Shell tools are "local", but a command that runs one of these programs sends
+# data off the machine. Such a call is treated as a network tool: vaulted values
+# are not restored into it and masking.on_network_tool applies.
+bash_guard:
+  tools: [Bash, run_command]
+  network_commands: [curl, wget, nc, ncat, netcat, socat, scp, sftp, rsync, ssh, ftp, telnet, http, https]
 
 injection:
   alert_threshold: 0.8 # AI advisor score (0-1) above which a prompt injection warning is raised

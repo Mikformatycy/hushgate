@@ -1,0 +1,204 @@
+# HushGate attack signatures.
+#
+# Each signature is checked against the arguments of every tool call the model
+# requests (for shell tools, also against the command with quoting tricks
+# removed). The strictest matching action wins over the tool policy:
+#   alert: allow the call, record it
+#   block: drop the call, the agent keeps running
+#   kill:  drop the call and halt the agent
+#
+# Feeds are listed under signatures.feeds in hushgate.yaml and can be files or
+# URLs, so a security team can publish one feed for every gate. Patterns are
+# RE2 regular expressions; "unless" suppresses a match.
+
+feed: HushGate baseline signatures
+version: "2026.10.04"
+signatures:
+
+  # Remote code execution
+
+  - id: HG-RCE-001
+    name: Remote script piped into a shell
+    category: remote_code_execution
+    severity: critical
+    action: block
+    tools: [Bash, run_command]
+    pattern: '(curl|wget)\b[^|;&]*\|\s*(sudo\s+)?(ba|z|da|k)?sh\b'
+    description: Downloads code and runs it without review, the classic way an install step gets trojanized.
+
+  - id: HG-RCE-002
+    name: Encoded payload executed
+    category: remote_code_execution
+    severity: critical
+    action: block
+    tools: [Bash, run_command]
+    pattern: 'base64\s+(-d|--decode)\b[^|;&]*\|\s*(ba|z)?sh\b'
+    description: Base64-decoded text run as a script, a common way to hide a payload from review.
+
+  - id: HG-RCE-003
+    name: Reverse shell
+    category: remote_code_execution
+    severity: critical
+    action: kill
+    tools: [Bash, run_command]
+    pattern: '/dev/tcp/[^\s/]+/[0-9]+|\b(nc|ncat|netcat)\b[^|;&]*\s-[ec]\s*/bin/(ba)?sh|pty\.spawn\('
+    description: Gives a remote attacker an interactive shell on the machine.
+
+  # Destructive commands
+
+  - id: HG-DES-001
+    name: Recursive delete of root or home
+    category: destructive
+    severity: high
+    action: block
+    tools: [Bash, run_command]
+    pattern: '\brm\s+(-[a-zA-Z]*[rR][a-zA-Z]*\s+)*(-[a-zA-Z]*f[a-zA-Z]*\s+)*(/|~|\$HOME|/\*)(\s|$)'
+    description: Wipes the filesystem or the user's home directory.
+
+  - id: HG-DES-002
+    name: Disk overwrite or reformat
+    category: destructive
+    severity: high
+    action: block
+    tools: [Bash, run_command]
+    pattern: '\bmkfs(\.[a-z0-9]+)?\s|\bdd\s+[^|;&]*of=/dev/(sd|nvme|disk|hd)'
+    description: Destroys data on a disk device.
+
+  - id: HG-DES-003
+    name: Fork bomb
+    category: destructive
+    severity: medium
+    action: block
+    tools: [Bash, run_command]
+    pattern: ':\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:'
+    description: Exhausts processes until the machine stops responding.
+
+  - id: HG-DES-004
+    name: Force-push to main
+    category: destructive
+    severity: medium
+    action: block
+    tools: [Bash, run_command]
+    pattern: 'git\s+push\b[^;&|]*(--force\b|\s-f\b)[^;&|]*\b(main|master)\b|git\s+push\b[^;&|]*\b(main|master)\b[^;&|]*(--force\b|\s-f\b)'
+    description: Rewrites shared history on the protected branch.
+
+  # Credential access
+
+  - id: HG-CRED-001
+    name: SSH keys or cloud credentials accessed
+    category: credential_access
+    severity: high
+    action: block
+    tools: ["*"]
+    pattern: '\.ssh/id_[a-z0-9]+|\.aws/credentials|\.config/gcloud/|\.kube/config|\.docker/config\.json|/etc/shadow|\.netrc\b|\.git-credentials'
+    description: Reads key material an agent has no reason to touch.
+
+  - id: HG-CRED-002
+    name: Environment or .env piped to the network
+    category: credential_access
+    severity: critical
+    action: kill
+    tools: [Bash, run_command]
+    pattern: '\b(env|printenv)\b[^;&]*\|\s*(curl|wget|nc|ncat)\b|\bcat\s+[^|;&]*\.env\b[^;&]*\|\s*(curl|wget|nc|ncat)\b'
+    description: Ships every secret in the environment to another host in one command.
+
+  # Exfiltration
+
+  - id: HG-EXF-001
+    name: Known exfiltration endpoint
+    category: exfiltration
+    severity: high
+    action: block
+    tools: ["*"]
+    pattern: '\b(webhook\.site|requestbin\.(com|net)|pipedream\.net|transfer\.sh|pastebin\.com|ngrok(-free)?\.(io|app)|interact\.sh|burpcollaborator\.net|oast\.(pro|live|site|online|fun|me))\b'
+    description: Services commonly used to receive stolen data, including in prompt injection attacks on AI agents.
+
+  # Unsafe deserialization
+
+  - id: HG-DESER-001
+    name: Pickle deserialization
+    category: unsafe_deserialization
+    severity: high
+    action: alert
+    tools: ["*"]
+    pattern: '\b(pickle|cPickle|dill|cloudpickle|joblib)\.loads?\('
+    description: Unpickling runs arbitrary code; malicious model files on public model hubs have used this.
+
+  - id: HG-DESER-002
+    name: torch.load without weights_only
+    category: unsafe_deserialization
+    severity: high
+    action: alert
+    tools: ["*"]
+    pattern: '\btorch\.load\('
+    unless: 'weights_only\s*=\s*True'
+    description: torch.load unpickles the file unless weights_only=True, so a poisoned checkpoint runs code.
+
+  - id: HG-DESER-003
+    name: Unsafe YAML load
+    category: unsafe_deserialization
+    severity: medium
+    action: alert
+    tools: ["*"]
+    pattern: '\byaml\.(load|unsafe_load)\('
+    unless: 'SafeLoader|CSafeLoader'
+    description: PyYAML's full loader can construct arbitrary Python objects.
+
+  - id: HG-DESER-004
+    name: NumPy load with pickles allowed
+    category: unsafe_deserialization
+    severity: medium
+    action: alert
+    tools: ["*"]
+    pattern: 'allow_pickle\s*=\s*True'
+    description: Lets a .npy file carry a pickle payload.
+
+  # Supply chain
+
+  - id: HG-SUP-001
+    name: Remote code from a model repository
+    category: supply_chain
+    severity: high
+    action: block
+    tools: ["*"]
+    pattern: 'trust_remote_code\s*=\s*True'
+    description: Runs Python code shipped inside a downloaded model; model hubs have hosted malicious repositories that rely on it.
+
+  - id: HG-SUP-002
+    name: torchtriton dependency confusion
+    category: supply_chain
+    severity: critical
+    action: kill
+    tools: ["*"]
+    pattern: '\btorchtriton\b'
+    description: Malicious package on PyPI that hijacked PyTorch nightly installs and stole data from the machine.
+    reference: PyTorch nightly dependency compromise, December 2022
+
+  - id: HG-SUP-003
+    name: Compromised ultralytics release
+    category: supply_chain
+    severity: critical
+    action: block
+    tools: ["*"]
+    pattern: 'ultralytics\s*==\s*8\.3\.4[12]\b'
+    description: Releases of the YOLO library published to PyPI with a cryptominer injected through the build pipeline.
+    reference: ultralytics 8.3.41 and 8.3.42 on PyPI, December 2024
+
+  - id: HG-SUP-004
+    name: Package install from an insecure index
+    category: supply_chain
+    severity: medium
+    action: block
+    tools: [Bash, run_command]
+    pattern: '\bpip3?\s+install\b[^;&|]*(--index-url|--extra-index-url|\s-i)\s+http://|\bpip3?\s+install\b[^;&|]*--trusted-host'
+    description: Installs packages over plain HTTP or with TLS checks disabled.
+
+  - id: HG-SUP-005
+    name: Known typosquatted package
+    category: supply_chain
+    severity: high
+    action: block
+    tools: ["*"]
+    pattern: '\b(jeIlyfish|python3-dateutil|colourama|crossenv)\b|event-stream@3\.3\.6'
+    description: Lookalike or hijacked packages that stole credentials or crypto wallets.
+    reference: jeIlyfish and python3-dateutil (PyPI, 2019), colourama (PyPI, 2018), crossenv (npm, 2017), event-stream 3.3.6 (npm, 2018)

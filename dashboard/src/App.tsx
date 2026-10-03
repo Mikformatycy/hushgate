@@ -1,9 +1,9 @@
-import { useMemo, useState, type ReactNode } from 'react'
-import { api, type Agent, type Config, type GateEvent, type Review } from './api'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { api, type Agent, type Config, type GateEvent, type Review, type Signatures } from './api'
 import { EventStatus, Meter, Mono, Panel, Status, Table, Td, TierBadge, eventMessage, time } from './ui'
 import { useGate } from './useGate'
 
-const pages = ['Dashboard', 'Agents', 'Nodes', 'Review', 'Audit log', 'Vault', 'Policy'] as const
+const pages = ['Dashboard', 'Agents', 'Nodes', 'Review', 'Audit log', 'Vault', 'Signatures', 'Policy'] as const
 type Page = (typeof pages)[number]
 
 const pageFromHash = (): Page =>
@@ -141,6 +141,7 @@ export default function App() {
           {page === 'Review' && <ReviewPage reviews={reviews} onDecided={refreshReviews} />}
           {page === 'Audit log' && <AuditLog events={events} />}
           {page === 'Vault' && <Vault config={config} />}
+          {page === 'Signatures' && <SignaturesPage config={config} events={events} />}
           {page === 'Policy' && <Policy config={config} />}
         </main>
       </div>
@@ -583,6 +584,102 @@ function ReviewCard({ r, onDecided }: { r: Review; onDecided: () => void }) {
         {err && <p className="text-xs text-bad">{err}</p>}
       </div>
     </div>
+  )
+}
+
+const severityTone = { low: 'muted', medium: 'warn', high: 'bad', critical: 'bad' } as const
+
+function SignaturesPage({ config, events }: { config: Config | null; events: GateEvent[] }) {
+  const [data, setData] = useState<Signatures | null>(null)
+  useEffect(() => {
+    let alive = true
+    const load = () => api.signatures().then((d) => alive && setData(d)).catch(() => {})
+    load()
+    const t = setInterval(load, 3000)
+    return () => {
+      alive = false
+      clearInterval(t)
+    }
+  }, [])
+  const hits = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const e of events) {
+      if (e.kind !== 'signature') continue
+      const id = e.reason?.split(' ')[0] ?? ''
+      m.set(id, (m.get(id) ?? 0) + 1)
+    }
+    return m
+  }, [events])
+  if (!data) return null
+  const sigs = data.signatures ?? []
+  return (
+    <>
+      <Panel title={`Feeds (${data.feeds?.length ?? 0})`}>
+        <p className="px-5 py-3 text-gray-600">
+          Signatures of known attacks, loaded from files and URLs listed under <Mono>signatures.feeds</Mono> in the
+          policy file. URL feeds are fetched on a schedule so one feed can protect every gate. A feed that fails to load
+          keeps its last good copy.
+        </p>
+        <Table head={['Source', 'Feed', 'Version', 'Signatures', 'Status']}>
+          {(data.feeds ?? []).map((f) => (
+            <tr key={f.source}>
+              <Td className="max-w-md break-all">
+                <Mono>{f.source}</Mono>
+              </Td>
+              <Td>{f.name || '—'}</Td>
+              <Td>{f.version || '—'}</Td>
+              <Td>{f.count}</Td>
+              <Td>{f.error ? <Status tone={f.count ? 'warn' : 'bad'}>{f.error}</Status> : <Status tone="ok">Loaded</Status>}</Td>
+            </tr>
+          ))}
+        </Table>
+      </Panel>
+
+      <Panel title={`Signatures (${sigs.length})`}>
+        <Table head={['ID', 'Signature', 'Category', 'Severity', 'Action', 'Applies to', 'Hits']}>
+          {sigs.map((s) => (
+            <tr key={s.id} className={s.enabled ? '' : 'opacity-50'}>
+              <Td className="whitespace-nowrap">
+                <Mono>{s.id}</Mono>
+              </Td>
+              <Td>
+                <p className="font-medium">
+                  {s.name}
+                  {!s.enabled && <span className="ml-2 text-xs text-gray-500">(disabled in policy)</span>}
+                </p>
+                <p className="text-xs text-gray-600">{s.description}</p>
+                {s.reference && <p className="text-xs text-gray-500">{s.reference}</p>}
+              </Td>
+              <Td className="whitespace-nowrap text-gray-700">{s.category.replaceAll('_', ' ')}</Td>
+              <Td>
+                <Status tone={severityTone[s.severity]}>{s.severity}</Status>
+              </Td>
+              <Td>
+                <Status tone={s.action === 'alert' ? 'warn' : 'bad'}>{s.action}</Status>
+              </Td>
+              <Td className="text-xs">{s.tools.includes('*') ? 'all tools' : s.tools.join(', ')}</Td>
+              <Td className="font-bold">{hits.get(s.id) ?? 0}</Td>
+            </tr>
+          ))}
+        </Table>
+      </Panel>
+
+      {config?.bash_guard && (
+        <Panel title="Bash guard">
+          <p className="px-5 py-3 text-gray-600">
+            Shell tools ({config.bash_guard.tools.map((t) => <Mono key={t}>{t}</Mono>)}) are local, but a command that runs
+            one of these programs sends data off the machine. Such a call is treated as a network tool: vaulted values are
+            not restored into it, and a secret in it fires the kill switch. Quoting tricks (<Mono>{"c''url"}</Mono>),{' '}
+            <Mono>sudo</Mono>, <Mono>xargs</Mono> and <Mono>bash -c</Mono> are seen through.
+          </p>
+          <div className="flex flex-wrap gap-1 px-5 pb-4">
+            {config.bash_guard.network_commands.map((c) => (
+              <Mono key={c}>{c}</Mono>
+            ))}
+          </div>
+        </Panel>
+      )}
+    </>
   )
 }
 

@@ -67,6 +67,8 @@ All controls are configured in `config/hushgate.yaml`:
 | Allowed models | Deterministic (glob patterns) | `models.allow` |
 | Device allowlist, approved LLM hosts | Deterministic | `nodes`, `llm_hosts` |
 | LLM traffic detection on any host | Deterministic: paths, headers, body shape | built in (`proxy/internal/detect`) |
+| Known attack signatures: remote code execution, unsafe deserialization, model supply chain, credential theft, exfiltration | Deterministic: feed of patterns from files or URLs, refreshed on a schedule | `signatures` ([`config/signatures.yaml`](config/signatures.yaml)) |
+| Bash guard: a shell command that reaches the network is treated as a network tool | Deterministic: command parsing that sees through quoting, `sudo`, `xargs`, `bash -c` | `bash_guard` |
 | Egress lockdown | Network (Docker internal networks) | `docker-compose*.yml` |
 | Review suggestions | AI (Jev), advisory | `TYPESAFE_API_KEY` |
 | Prompt injection warning | AI (Jev), alert only | `injection.alert_threshold` (needs `TYPESAFE_API_KEY`) |
@@ -83,10 +85,10 @@ Deep inspection (masking, tool policy, budgets) covers the Anthropic Messages AP
 
 ## Testing
 
-36 automated tests cover allowed and blocked cases for every control, including false positives:
+49 automated tests cover allowed and blocked cases for every control, including false positives:
 
 ```sh
-docker run --rm -v "$PWD/proxy":/src -w /src golang:1.26-alpine go test ./...
+docker run --rm -v "$PWD":/src -w /src/proxy golang:1.26-alpine go test ./...
 ```
 
 ## Repository

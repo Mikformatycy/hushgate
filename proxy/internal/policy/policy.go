@@ -90,11 +90,17 @@ func ValidSink(s string) bool {
 // the machine means the agent is compromised (kill); personal data headed off
 // the machine is a policy violation (block).
 func (p *Policy) Decide(tool string, carried []vault.Ref) (act Action, rehydrate bool, reason string) {
+	return p.DecideAs(p.SinkFor(tool), carried)
+}
+
+// DecideAs decides for an explicit sink, e.g. when the Bash guard finds that a
+// "local" shell call actually sends data off the machine.
+func (p *Policy) DecideAs(sink Sink, carried []vault.Ref) (act Action, rehydrate bool, reason string) {
 	highest := vault.Tier(-1)
 	for _, r := range carried {
 		highest = max(highest, r.Tier)
 	}
-	switch p.SinkFor(tool) {
+	switch sink {
 	case Deny:
 		return Block, false, "tool not permitted by policy"
 	case Network:
