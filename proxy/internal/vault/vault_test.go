@@ -81,7 +81,7 @@ func TestDynamicDetection(t *testing.T) {
 	if strings.Contains(s, "AKIA") || strings.Contains(s, "topsecret") {
 		t.Fatalf("leaked: %s", s)
 	}
-	if !strings.Contains(s, "postgres://u:{{VAULT_DYN_") {
+	if !strings.Contains(s, "postgres://u:{{VAULT_URL_PASSWORD_") {
 		t.Fatalf("dsn user should stay, password masked: %s", s)
 	}
 	if len(refs) != 2 {

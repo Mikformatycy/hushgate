@@ -36,8 +36,15 @@ type agentView struct {
 }
 
 type varView struct {
-	Name string `json:"name"`
-	Tier string `json:"tier"`
+	Name   string `json:"name"`
+	Tier   string `json:"tier"`
+	Reason string `json:"reason"`
+}
+
+type detectorView struct {
+	Name  string `json:"name"`
+	Tier  string `json:"tier"`
+	Check string `json:"check"`
 }
 
 func (a *API) Handler() http.Handler {
@@ -96,9 +103,17 @@ func (a *API) reset(w http.ResponseWriter, r *http.Request) {
 func (a *API) config(w http.ResponseWriter, r *http.Request) {
 	vars := make([]varView, 0, len(a.Vars))
 	for _, v := range a.Vars {
-		vars = append(vars, varView{Name: v.Name, Tier: v.Tier.String()})
+		vars = append(vars, varView{Name: v.Name, Tier: v.Tier.String(), Reason: v.Reason})
 	}
-	writeJSON(w, map[string]any{"vault": vars, "mask_from": a.MaskFrom.String(), "policy": a.Policy, "token_limit": a.TokenLimit, "nodes": a.Nodes})
+	var detectors []detectorView
+	seen := map[string]bool{}
+	for _, d := range vault.Detectors {
+		if !seen[d.Name] {
+			seen[d.Name] = true
+			detectors = append(detectors, detectorView{Name: d.Name, Tier: d.Tier.String(), Check: d.Check})
+		}
+	}
+	writeJSON(w, map[string]any{"vault": vars, "mask_from": a.MaskFrom.String(), "policy": a.Policy, "token_limit": a.TokenLimit, "nodes": a.Nodes, "detectors": detectors})
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

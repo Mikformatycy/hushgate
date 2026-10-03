@@ -83,21 +83,17 @@ func (v *Vault) Mask(body []byte) ([]byte, []Ref) {
 	}
 	v.mu.RUnlock()
 
-	for _, re := range detectors {
-		body = re.ReplaceAllFunc(body, func(m []byte) []byte {
-			e := v.dynamic(string(m))
+	for i := range Detectors {
+		d := &Detectors[i]
+		body = replaceRanges(body, d.find(body), func(m []byte) []byte {
+			if tokenRe.Match(m) {
+				return m
+			}
+			e := v.dynamic(d, string(m))
 			refs = append(refs, e.ref())
 			return []byte(e.Token)
 		})
 	}
-	body = replaceSubmatch(dsnPassword, body, func(m []byte) []byte {
-		if tokenRe.Match(m) {
-			return m
-		}
-		e := v.dynamic(string(m))
-		refs = append(refs, e.ref())
-		return []byte(e.Token)
-	})
 	return body, refs
 }
 
@@ -129,15 +125,15 @@ func (v *Vault) RehydrateJSON(s string) string {
 // dynamic registers a detector match. matched is already JSON-escaped since
 // it was found in a JSON body. Tokens are hash-based so they stay stable
 // across requests (keeps prompt caching intact).
-func (v *Vault) dynamic(matched string) *entry {
+func (v *Vault) dynamic(d *Detector, matched string) *entry {
 	sum := sha256.Sum256([]byte(matched))
-	tok := "{{VAULT_DYN_" + strings.ToUpper(hex.EncodeToString(sum[:4])) + "}}"
+	tok := "{{VAULT_" + d.Name + "_" + strings.ToUpper(hex.EncodeToString(sum[:4])) + "}}"
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	if e, ok := v.byToken[tok]; ok {
 		return e
 	}
-	e := &entry{Name: "detected", Tier: Secret, Token: tok, raw: matched, escaped: matched}
+	e := &entry{Name: d.Name, Tier: d.Tier, Token: tok, raw: matched, escaped: matched}
 	v.byToken[tok] = e
 	return e
 }
@@ -146,8 +142,9 @@ func (e *entry) ref() Ref { return Ref{Name: e.Name, Tier: e.Tier, Token: e.Toke
 
 // Var is the loader's view of a variable, safe to log (no value).
 type Var struct {
-	Name string
-	Tier Tier
+	Name   string
+	Tier   Tier
+	Reason string
 }
 
 // LoadEnvFile reads KEY=VALUE lines, classifies them and adds them to the
@@ -174,14 +171,14 @@ func (v *Vault) LoadEnvFile(path string) ([]Var, error) {
 		}
 		name = strings.TrimSpace(name)
 		value, comment := splitValue(strings.TrimSpace(rest))
-		tier := Classify(name, value)
+		tier, reason := ClassifyWhy(name, value)
 		if _, ann, ok := strings.Cut(comment, "@class:"); ok {
 			if t, ok := ParseTier(ann); ok {
-				tier = t
+				tier, reason = t, "annotated @class: "+t.String()+" in .env"
 			}
 		}
 		v.Add(name, value, tier)
-		vars = append(vars, Var{Name: name, Tier: tier})
+		vars = append(vars, Var{Name: name, Tier: tier, Reason: reason})
 	}
 	return vars, sc.Err()
 }
@@ -237,18 +234,17 @@ func jsonEscape(s string) string {
 	return out[1 : len(out)-1]
 }
 
-// replaceSubmatch replaces only capture group 1 of each match.
-func replaceSubmatch(re *regexp.Regexp, src []byte, fn func([]byte) []byte) []byte {
-	idx := re.FindAllSubmatchIndex(src, -1)
-	if idx == nil {
+// replaceRanges replaces each [start, end) range of src (sorted, disjoint).
+func replaceRanges(src []byte, ranges [][2]int, fn func([]byte) []byte) []byte {
+	if len(ranges) == 0 {
 		return src
 	}
 	var out bytes.Buffer
 	last := 0
-	for _, m := range idx {
-		out.Write(src[last:m[2]])
-		out.Write(fn(src[m[2]:m[3]]))
-		last = m[3]
+	for _, r := range ranges {
+		out.Write(src[last:r[0]])
+		out.Write(fn(src[r[0]:r[1]]))
+		last = r[1]
 	}
 	out.Write(src[last:])
 	return out.Bytes()

@@ -145,7 +145,7 @@ func (g *Gateway) forward(ctx context.Context, r *http.Request, body []byte) (*h
 // and the (possibly rehydrated) JSON input to hand to the agent.
 func (g *Gateway) decideTool(ctx context.Context, agent, id, name, input string) (policy.Action, string, string) {
 	refs := g.Vault.Tokens(input)
-	act, rehydrate, reason := g.Policy.Decide(name, len(refs) > 0)
+	act, rehydrate, reason := g.Policy.Decide(name, refs)
 	if act == policy.Kill {
 		if err := g.Budget.Kill(ctx, agent, fmt.Sprintf("%s: %s", name, reason)); err != nil {
 			log.Printf("kill %s: %v", agent, err)

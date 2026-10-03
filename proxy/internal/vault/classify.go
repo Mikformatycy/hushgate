@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -38,50 +39,66 @@ var (
 	booleans = set("TRUE", "FALSE", "YES", "NO", "ON", "OFF")
 )
 
-// Classify assigns a tier from the variable name and value. Rules run in
-// precedence order; explicit annotations are handled by the .env loader.
+// Classify assigns a tier from the variable name and value.
 func Classify(name, value string) Tier {
+	t, _ := ClassifyWhy(name, value)
+	return t
+}
+
+// ClassifyWhy also returns the rule that decided, for the audit trail. Rules
+// run in precedence order; explicit annotations are handled by the .env loader.
+func ClassifyWhy(name, value string) (Tier, string) {
 	v := strings.TrimSpace(value)
-	switch {
-	case matchesKnownFormat(v):
-		return Secret
-	case v == "" || booleans[strings.ToUpper(v)]:
-		return Public
-	case nameIsSecret(name):
-		return Secret
-	case isNumeric(v) || len(v) < 4:
-		return Public
+	d, detected := detectValue(v)
+	if detected && d.Tier == Secret {
+		return Secret, "value matches " + d.Name + " format (" + d.Check + ")"
+	}
+	if v == "" || booleans[strings.ToUpper(v)] {
+		return Public, "empty or boolean value"
+	}
+	if word, ok := secretWord(name); ok {
+		return Secret, "name contains " + word
+	}
+	if detected {
+		return d.Tier, "value is a valid " + d.Name + " (" + d.Check + ")"
+	}
+	if isNumeric(v) || len(v) < 4 {
+		return Public, "numeric or very short value"
 	}
 	segs := segments(name)
 	for _, s := range segs {
 		if internalSegments[s] {
-			return Internal
+			return Internal, "name contains " + s
 		}
 	}
 	for _, s := range segs {
 		if publicSegments[s] {
-			return Public
+			return Public, "name contains " + s
 		}
 	}
-	if len(v) >= 16 && entropy(v) >= 3.5 {
-		return Secret
+	if h := entropy(v); len(v) >= 16 && h >= 3.5 {
+		return Secret, fmt.Sprintf("random-looking value (%.1f bits/char entropy)", h)
 	}
-	return Confidential
+	return Confidential, FallbackReason
 }
 
-func nameIsSecret(name string) bool {
+// FallbackReason marks variables no rule recognized; they are masked by
+// default and are the candidates for human (or AI-assisted) review.
+const FallbackReason = "no rule matched, masked by default"
+
+func secretWord(name string) (string, bool) {
 	for _, s := range segments(name) {
 		if secretSegments[s] {
-			return true
+			return s, true
 		}
 	}
 	up := strings.ToUpper(name)
 	for _, sub := range secretSubstrings {
 		if strings.Contains(up, sub) {
-			return true
+			return sub, true
 		}
 	}
-	return false
+	return "", false
 }
 
 func segments(name string) []string {

@@ -4,3 +4,4 @@
 /proxy/bin/
 node_modules/
 dist/
+demo/workspace/cfg.txt

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+
+	"github.com/Mikformatycy/goldman-sachs/proxy/internal/vault"
 )
 
 // Sink says where a tool's arguments end up.
@@ -56,14 +58,23 @@ func (p *Policy) SinkFor(tool string) Sink {
 }
 
 // Decide returns the action for a tool call and whether vault placeholders in
-// its arguments may be swapped back to real values.
-func (p *Policy) Decide(tool string, carriesSecrets bool) (act Action, rehydrate bool, reason string) {
+// its arguments may be swapped back to real values. A credential headed off
+// the machine means the agent is compromised (kill); personal data headed off
+// the machine is a policy violation (block).
+func (p *Policy) Decide(tool string, carried []vault.Ref) (act Action, rehydrate bool, reason string) {
+	highest := vault.Tier(-1)
+	for _, r := range carried {
+		highest = max(highest, r.Tier)
+	}
 	switch p.SinkFor(tool) {
 	case Deny:
 		return Block, false, "tool not permitted by policy"
 	case Network:
-		if carriesSecrets {
+		switch {
+		case highest >= vault.Secret:
 			return Kill, false, "vaulted secret in arguments of network tool"
+		case highest >= vault.Confidential:
+			return Block, false, "personal or confidential data in arguments of network tool"
 		}
 		return Allow, false, "network tool, no secrets"
 	default:

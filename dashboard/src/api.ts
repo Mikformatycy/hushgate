@@ -21,7 +21,8 @@ export type Agent = {
 }
 
 export type Config = {
-  vault: { name: string; tier: 'C0' | 'C1' | 'C2' | 'C3' }[]
+  vault: { name: string; tier: 'C0' | 'C1' | 'C2' | 'C3'; reason: string }[]
+  detectors: { name: string; tier: string; check: string }[]
   mask_from: string
   policy: { default: string; tools: Record<string, 'local' | 'network' | 'deny'> }
   token_limit: number
