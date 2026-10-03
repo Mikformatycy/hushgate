@@ -260,23 +260,53 @@ function Vault({ config }: { config: Config | null }) {
   if (!config) return null
   const masked = (tier: string) => tier >= config.mask_from
   return (
-    <Panel title={`Variables (${config.vault.length})`}>
-      <p className="px-5 py-3 text-gray-600">
-        Values from the loaded <Mono>.env</Mono> files. Anything classified {config.mask_from} or higher is replaced
-        with a placeholder before it reaches the LLM provider. Values are never shown here.
-      </p>
-      <Table head={['Name', 'Classification', 'Sent to LLM as']} empty="No .env files loaded.">
-        {config.vault.map((v) => (
-          <tr key={v.name}>
-            <Td className="font-medium">{v.name}</Td>
-            <Td>
-              <TierBadge tier={v.tier} />
-            </Td>
-            <Td>{masked(v.tier) ? <Mono>{`{{VAULT_ENV_${v.name.toUpperCase()}}}`}</Mono> : <span className="text-gray-500">Real value</span>}</Td>
-          </tr>
-        ))}
-      </Table>
-    </Panel>
+    <>
+      <Panel title={`Variables (${config.vault.length})`}>
+        <p className="px-5 py-3 text-gray-600">
+          Values from the loaded <Mono>.env</Mono> files. Anything classified {config.mask_from} or higher is replaced
+          with a placeholder before it reaches the LLM provider. Every tier comes from a fixed rule, shown below; values
+          are never shown here.
+        </p>
+        <Table head={['Name', 'Classification', 'Decided by', 'Sent to LLM as']} empty="No .env files loaded.">
+          {config.vault.map((v) => (
+            <tr key={v.name}>
+              <Td className="font-medium whitespace-nowrap">{v.name}</Td>
+              <Td className="whitespace-nowrap">
+                <TierBadge tier={v.tier} />
+              </Td>
+              <Td className="text-gray-700">{v.reason}</Td>
+              <Td>
+                {masked(v.tier) ? (
+                  <Mono>{`{{VAULT_ENV_${v.name.toUpperCase()}}}`}</Mono>
+                ) : (
+                  <span className="text-gray-500">Real value</span>
+                )}
+              </Td>
+            </tr>
+          ))}
+        </Table>
+      </Panel>
+      <Panel title={`Detectors (${config.detectors?.length ?? 0})`}>
+        <p className="px-5 py-3 text-gray-600">
+          Applied to every outgoing request, so values are caught even when they were never in a <Mono>.env</Mono> file.
+          Personal data detectors only fire when the checksum is valid. Credentials in a network tool call trip the kill
+          switch; personal data blocks the call.
+        </p>
+        <Table head={['Detector', 'Classification', 'Validation']}>
+          {(config.detectors ?? []).map((d) => (
+            <tr key={d.name}>
+              <Td>
+                <Mono>{d.name}</Mono>
+              </Td>
+              <Td className="whitespace-nowrap">
+                <TierBadge tier={d.tier} />
+              </Td>
+              <Td className="text-gray-700">{d.check}</Td>
+            </tr>
+          ))}
+        </Table>
+      </Panel>
+    </>
   )
 }
 
