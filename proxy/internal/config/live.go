@@ -33,6 +33,9 @@ type Live struct {
 	path    string
 	apply   ApplyFunc
 	onEvent func(action, detail string) // "reloaded" or "rejected"
+	// Extra returns more content to watch for a config, e.g. signature feeds;
+	// a change in it triggers a reload like an edit to the file itself.
+	Extra func(*Config) [][]byte
 
 	cur     atomic.Pointer[Config]
 	mu      sync.Mutex // serializes reloads and write-backs
@@ -98,7 +101,7 @@ func (l *Live) reload(initial bool) (changed bool, err error) {
 	if !initial {
 		changes := Diff(old, cfg)
 		if len(changes) == 0 {
-			changes = []string{"vault .env files changed"}
+			changes = []string{"vault .env files or signature feeds changed"}
 		}
 		l.onEvent("reloaded", joinChanges(changes))
 	}
@@ -130,6 +133,11 @@ func (l *Live) fingerprint(data []byte, cfg *Config) string {
 			b, _ := os.ReadFile(f)
 			h.Write([]byte(f))
 			h.Write(b)
+		}
+		if l.Extra != nil {
+			for _, b := range l.Extra(cfg) {
+				h.Write(b)
+			}
 		}
 	}
 	return hex.EncodeToString(h.Sum(nil))

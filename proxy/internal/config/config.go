@@ -46,8 +46,21 @@ type Config struct {
 	Injection struct {
 		AlertThreshold *float64 `yaml:"alert_threshold"`
 	} `yaml:"injection"`
-	Nodes []Node `yaml:"nodes"`
+	Nodes      []Node `yaml:"nodes"`
+	Signatures struct {
+		Feeds          []string `yaml:"feeds"`
+		RefreshSeconds int      `yaml:"refresh_seconds"`
+		Disabled       []string `yaml:"disabled"`
+	} `yaml:"signatures"`
+	BashGuard struct {
+		Tools           []string `yaml:"tools"`
+		NetworkCommands []string `yaml:"network_commands"`
+	} `yaml:"bash_guard"`
 }
+
+// DefaultNetworkCommands are programs that send data off the machine.
+var DefaultNetworkCommands = []string{"curl", "wget", "nc", "ncat", "netcat", "socat", "scp", "sftp", "rsync",
+	"ssh", "ftp", "telnet", "http", "https"}
 
 var (
 	sinks   = []string{"local", "network", "deny"}
@@ -85,6 +98,15 @@ func (c *Config) defaults() {
 		if _, ok := c.Masking.OnNetworkTool[t]; !ok {
 			c.Masking.OnNetworkTool[t] = a
 		}
+	}
+	if c.Signatures.RefreshSeconds == 0 {
+		c.Signatures.RefreshSeconds = 300
+	}
+	if c.BashGuard.Tools == nil {
+		c.BashGuard.Tools = []string{"Bash"}
+	}
+	if c.BashGuard.NetworkCommands == nil {
+		c.BashGuard.NetworkCommands = DefaultNetworkCommands
 	}
 	if c.Injection.AlertThreshold == nil {
 		v := 0.8
@@ -135,6 +157,14 @@ func (c *Config) validate() error {
 	}
 	if t := *c.Injection.AlertThreshold; t < 0 || t > 1 {
 		bad("injection.alert_threshold: %v must be between 0 and 1", t)
+	}
+	if c.Signatures.RefreshSeconds < 10 {
+		bad("signatures.refresh_seconds: must be at least 10")
+	}
+	for i, f := range c.Signatures.Feeds {
+		if strings.TrimSpace(f) == "" {
+			bad("signatures.feeds[%d]: empty source", i)
+		}
 	}
 	seen := map[string]bool{}
 	for i, n := range c.Nodes {
@@ -239,6 +269,11 @@ func flatten(c *Config) map[string]string {
 		m["nodes."+n.ID+".owner"] = n.Owner
 		m["nodes."+n.ID+".token"] = n.Token
 	}
+	m["signatures.feeds"] = "[" + strings.Join(c.Signatures.Feeds, ", ") + "]"
+	m["signatures.refresh_seconds"] = fmt.Sprint(c.Signatures.RefreshSeconds)
+	m["signatures.disabled"] = "[" + strings.Join(c.Signatures.Disabled, ", ") + "]"
+	m["bash_guard.tools"] = "[" + strings.Join(c.BashGuard.Tools, ", ") + "]"
+	m["bash_guard.network_commands"] = "[" + strings.Join(c.BashGuard.NetworkCommands, ", ") + "]"
 	return m
 }
 

@@ -8,14 +8,19 @@ import (
 	"github.com/Mikformatycy/hushgate/proxy/internal/forward"
 	"github.com/Mikformatycy/hushgate/proxy/internal/policy"
 	"github.com/Mikformatycy/hushgate/proxy/internal/review"
+	"github.com/Mikformatycy/hushgate/proxy/internal/shell"
+	"github.com/Mikformatycy/hushgate/proxy/internal/signature"
 	"github.com/Mikformatycy/hushgate/proxy/internal/vault"
 )
 
 type Engine struct {
-	Policy  *policy.Policy
-	Vault   *vault.Vault
-	Reviews *review.Store
-	Nodes   *forward.Registry
+	Policy     *policy.Policy
+	Vault      *vault.Vault
+	Reviews    *review.Store
+	Nodes      *forward.Registry
+	Guard      *shell.Guard
+	Signatures *signature.Set
+	Feeds      *signature.Loader
 }
 
 // Apply is a config.ApplyFunc. The vault is loaded first because it is the
@@ -42,6 +47,15 @@ func (e *Engine) Apply(_, cfg *config.Config) error {
 		onNetwork[tier] = policy.Action(a)
 	}
 	e.Policy.Replace(tools, policy.Sink(cfg.Tools.Default), onNetwork)
+
+	if e.Guard != nil {
+		e.Guard.Replace(cfg.BashGuard.Tools, cfg.BashGuard.NetworkCommands)
+	}
+	if e.Signatures != nil && e.Feeds != nil {
+		// A broken or unreachable feed keeps its last good copy; it never fails the reload.
+		feeds, status := e.Feeds.Load(cfg.Signatures.Feeds)
+		e.Signatures.Replace(feeds, status, cfg.Signatures.Disabled)
+	}
 
 	if e.Nodes != nil {
 		nodes := make([]forward.Node, 0, len(cfg.Nodes))

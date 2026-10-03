@@ -19,6 +19,7 @@ import (
 	"github.com/Mikformatycy/hushgate/proxy/internal/policy"
 	"github.com/Mikformatycy/hushgate/proxy/internal/review"
 	"github.com/Mikformatycy/hushgate/proxy/internal/scan"
+	"github.com/Mikformatycy/hushgate/proxy/internal/signature"
 	"github.com/Mikformatycy/hushgate/proxy/internal/vault"
 )
 
@@ -33,6 +34,7 @@ type API struct {
 	Reviews      *review.Store
 	Scans        *scan.Store
 	Live         *config.Live // the policy file: thresholds, budgets, nodes; decisions are written back to it
+	Signatures   *signature.Set
 }
 
 type agentView struct {
@@ -62,6 +64,7 @@ func (a *API) Handler() http.Handler {
 	admin.HandleFunc("POST /api/agents/{id}/reset", a.reset)
 	admin.HandleFunc("GET /api/config", a.config)
 	admin.HandleFunc("GET /api/reviews", a.reviews)
+	admin.HandleFunc("GET /api/signatures", a.signatures)
 	admin.HandleFunc("POST /api/reviews/{id}/decision", a.decide)
 
 	advisor := http.NewServeMux()
@@ -276,6 +279,15 @@ func (a *API) config(w http.ResponseWriter, r *http.Request) {
 		"injection_threshold": *cfg.Injection.AlertThreshold,
 		"nodes":               nodes, "detectors": detectors, "policy_file": a.Live.Status(),
 	})
+}
+
+func (a *API) signatures(w http.ResponseWriter, r *http.Request) {
+	if a.Signatures == nil {
+		writeJSON(w, map[string]any{"feeds": []any{}, "signatures": []any{}})
+		return
+	}
+	sigs, feeds := a.Signatures.List()
+	writeJSON(w, map[string]any{"feeds": feeds, "signatures": sigs})
 }
 
 func validTier(s string) bool {

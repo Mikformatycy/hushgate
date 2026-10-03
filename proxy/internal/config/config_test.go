@@ -143,7 +143,7 @@ func TestLiveReloadRejectAndRecover(t *testing.T) {
 	writeFile(t, env, "A=2\n") // vault file edit alone triggers a reload
 	before := applied
 	reload()
-	if applied != before+1 || !strings.HasSuffix(ev.got[len(ev.got)-1], "vault .env files changed") {
+	if applied != before+1 || !strings.HasSuffix(ev.got[len(ev.got)-1], "vault .env files or signature feeds changed") {
 		t.Fatalf("env change not reloaded: %v", ev.got)
 	}
 }
