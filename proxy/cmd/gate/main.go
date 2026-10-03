@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mikformatycy/goldman-sachs/proxy/internal/admin"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/audit"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/budget"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/gateway"
@@ -33,6 +34,7 @@ func main() {
 	}
 
 	v := vault.New(maskFrom)
+	var allVars []vault.Var
 	for _, path := range strings.Split(os.Getenv("VAULT_ENV_FILES"), ",") {
 		if path = strings.TrimSpace(path); path == "" {
 			continue
@@ -41,6 +43,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("load %s: %v", path, err)
 		}
+		allVars = append(allVars, vars...)
 		for _, x := range vars {
 			log.Printf("vault: %s %s", x.Tier, x.Name)
 		}
@@ -62,6 +65,9 @@ func main() {
 		store = r
 	}
 
+	ring := audit.NewRing(2000)
+	logger := audit.Multi{audit.NewJSONLogger(os.Stdout), ring}
+
 	gw := &gateway.Gateway{
 		Upstream:    upstream,
 		UpstreamKey: os.Getenv("UPSTREAM_API_KEY"),
@@ -70,7 +76,17 @@ func main() {
 		Vault:       v,
 		Policy:      pol,
 		Budget:      store,
-		Audit:       audit.NewJSONLogger(os.Stdout),
+		Audit:       logger,
+	}
+
+	if token := os.Getenv("ADMIN_TOKEN"); token != "" {
+		api := &admin.API{Token: token, Events: ring, Budget: store, Audit: logger,
+			Vars: allVars, MaskFrom: maskFrom, Policy: pol, TokenLimit: limit}
+		adminAddr := env("ADMIN_ADDR", ":8081")
+		log.Printf("admin api listening on %s", adminAddr)
+		go func() { log.Fatal(http.ListenAndServe(adminAddr, api.Handler())) }()
+	} else {
+		log.Printf("ADMIN_TOKEN not set, admin api disabled")
 	}
 
 	addr := env("LISTEN_ADDR", ":8080")

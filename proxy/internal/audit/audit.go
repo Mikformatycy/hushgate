@@ -10,6 +10,7 @@ import (
 )
 
 type Event struct {
+	ID     int64     `json:"id"`
 	Time   time.Time `json:"time"`
 	Agent  string    `json:"agent"`
 	Kind   string    `json:"kind"` // request | mask | tool_call | usage | denied
@@ -40,4 +41,50 @@ func (l *JSONLogger) Record(e Event) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.w.Write(append(b, '\n'))
+}
+
+// Multi fans an event out to several loggers.
+type Multi []Logger
+
+func (m Multi) Record(e Event) {
+	if e.Time.IsZero() {
+		e.Time = time.Now()
+	}
+	for _, l := range m {
+		l.Record(e)
+	}
+}
+
+// Ring keeps the most recent events in memory for the dashboard.
+type Ring struct {
+	mu     sync.Mutex
+	size   int
+	nextID int64
+	events []Event
+}
+
+func NewRing(size int) *Ring { return &Ring{size: size} }
+
+func (r *Ring) Record(e Event) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.nextID++
+	e.ID = r.nextID
+	r.events = append(r.events, e)
+	if len(r.events) > r.size {
+		r.events = r.events[len(r.events)-r.size:]
+	}
+}
+
+// After returns events with ID greater than after, oldest first.
+func (r *Ring) After(after int64) []Event {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := []Event{}
+	for _, e := range r.events {
+		if e.ID > after {
+			out = append(out, e)
+		}
+	}
+	return out
 }
