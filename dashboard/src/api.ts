@@ -39,6 +39,12 @@ export type Config = {
   bash_guard: { tools: string[]; network_commands: string[] }
 }
 
+export type StageSummary = { count: number; p50_ms: number; p95_ms: number; p99_ms: number; max_ms: number }
+export type MetricsSummary = {
+  stages: Record<'preprocess' | 'tool_decision' | 'upstream_first_byte' | 'total', StageSummary>
+  since: string
+}
+
 export type Signatures = {
   feeds: { source: string; name: string; version: string; count: number; error?: string }[] | null
   signatures:
@@ -90,6 +96,7 @@ export const api = {
   config: () => get<Config>('/api/config'),
   reviews: () => get<Review[]>('/api/reviews'),
   signatures: () => get<Signatures>('/api/signatures'),
+  metrics: () => get<MetricsSummary>('/api/metrics/summary'),
   decide: async (id: string, action: 'apply' | 'dismiss', value?: string) => {
     const res = await fetch(`/api/reviews/${encodeURIComponent(id)}/decision`, {
       method: 'POST',

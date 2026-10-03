@@ -50,6 +50,16 @@ curl -X POST localhost:3000/api/agents/jdoe-macbook/reset
 - **Audit log:** every decision with its reason; filter by type.
 - Raw audit events: `docker compose -f docker-compose.corp.yml logs -f gate`
 
+## Reporting
+
+- **Export:** on the Audit log page, pick a filter and click Export CSV or Export JSON. The export reads the gate's full audit file, not just what is on screen.
+- **Prometheus:** http://localhost:9090. Example queries:
+  - `sum by (action) (hushgate_tool_calls_total)`: tool calls allowed, blocked and killed
+  - `histogram_quantile(0.95, sum by (le, stage) (rate(hushgate_latency_seconds_bucket[5m])))`: p95 latency per stage
+  - `sum by (id) (hushgate_signature_hits_total)`: attack signature hits
+  - `hushgate_llm_tokens_total`: tokens per agent
+- **Raw metrics:** `docker compose exec prometheus wget -qO- --header "Authorization: Bearer demo-metrics-token" http://gate:8081/metrics` (add `-f docker-compose.corp.yml` for the company network). The metrics token can read only `/metrics`.
+
 ## Gateway mode
 
 The basic setup: one agent container whose only route out is the gate, configured with `ANTHROPIC_BASE_URL`.

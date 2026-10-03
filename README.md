@@ -75,6 +75,12 @@ All controls are configured in `config/hushgate.yaml`:
 
 Everything in the right-hand column lives in one file, [`config/hushgate.yaml`](config/hushgate.yaml). The gate reloads it within a second of saving and logs exactly what changed; an invalid edit is rejected and the previous policy stays active. Decisions made on the Review page are written back into the file.
 
+## Reporting
+
+- **Dashboard** (http://localhost:3000): live audit log, blocked threats, budgets, devices, review queue, signatures, and a performance panel that separates the gate's own overhead (about 0.3 ms per request, under 0.2 ms per tool call in the demo) from the LLM provider's latency.
+- **Audit trail**: every decision is appended to a JSON Lines file (`AUDIT_LOG_FILE`) that log shippers and SIEMs can ingest, and that refills the dashboard after a restart. The Audit log page exports it as CSV or JSON with the current filter. Exports and logs contain placeholder names, never secret values.
+- **Prometheus** (`/metrics` on the admin port, its own `METRICS_TOKEN`): request counts and latency histograms per stage, tool calls by action, masked values by tier, signature hits, token usage per agent, policy reloads, and every audit event type. A Prometheus server is included at http://localhost:9090.
+
 ## Where it can run
 
 - **Developer machines and CI, gateway mode.** Agents point at the gate (`ANTHROPIC_BASE_URL=http://gate:8080`), or a device-management profile sets it. The gate holds the real provider key, so agents never do. See `docker-compose.yml`.
@@ -85,7 +91,7 @@ Deep inspection (masking, tool policy, budgets) covers the Anthropic Messages AP
 
 ## Testing
 
-49 automated tests cover allowed and blocked cases for every control, including false positives:
+56 automated tests cover allowed and blocked cases for every control, including false positives:
 
 ```sh
 docker run --rm -v "$PWD":/src -w /src/proxy golang:1.26-alpine go test ./...
@@ -103,5 +109,5 @@ demo/        fake model, demo workspace, company network simulation
 
 ## Current limitations
 
-- Audit events and the review and injection queues live in memory and are lost on restart; budgets and kills persist in Redis, and review decisions persist in the policy file.
+- The review and injection queues live in memory and are rebuilt after a restart; audit events persist in the audit file, budgets and kills in Redis, review decisions in the policy file.
 - Budgets are counted in tokens, not currency.

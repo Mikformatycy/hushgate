@@ -13,7 +13,7 @@ import (
 )
 
 type Event struct {
-	ID     int64     `json:"id"`
+	ID     int64     `json:"id,omitempty"` // per process (dashboard paging); absent in the audit file
 	Time   time.Time `json:"time"`
 	Agent  string    `json:"agent"`
 	Kind   string    `json:"kind"` // mask | tool_call | usage | denied | reset | shadow_ai | node_blocked | policy | signature | ...

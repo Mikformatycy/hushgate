@@ -28,6 +28,8 @@ services:
       REDIS_ADDR: redis:6379
       ADMIN_TOKEN: ${ADMIN_TOKEN:-demo-admin-token}
       ADVISOR_TOKEN: ${ADVISOR_TOKEN:-demo-advisor-token}
+      METRICS_TOKEN: ${METRICS_TOKEN:-demo-metrics-token}
+      AUDIT_LOG_FILE: /var/log/hushgate/audit.jsonl
       CA_CERT_FILE: /certs/corp-ca.crt
       CA_KEY_FILE: /certs/corp-ca.key
       UPSTREAM_CA_FILES: /certs/internet-ca.crt
@@ -36,6 +38,7 @@ services:
       - certs:/certs:ro
       - ./config:/etc/hushgate
       - ./demo/workspace:/vault:ro
+      - audit:/var/log/hushgate
     networks: [corpnet, internet, backend, mgmt]
     depends_on:
       certs: { condition: service_completed_successfully }
@@ -45,6 +48,16 @@ services:
   redis:
     image: redis:7-alpine
     networks: [backend]
+
+  # Prometheus: scrapes the gate's /metrics. UI on http://localhost:9090
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    networks: [backend, mgmt]
+    depends_on: [gate]
 
   # AI policy advisor (TypeSafe Jev). Sits on mgmt only, so it reaches the real Jev API
   # (not the simulated internet) and the gate's admin port with a
@@ -100,3 +113,4 @@ networks:
 
 volumes:
   certs:
+  audit:
