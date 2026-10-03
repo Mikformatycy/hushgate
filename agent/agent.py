@@ -19,6 +19,10 @@ TOOLS = [
     {"name": "send_email", "description": "Send an email.",
      "input_schema": {"type": "object", "properties": {"to": {"type": "string"}, "subject": {"type": "string"},
                                                        "body": {"type": "string"}}, "required": ["to", "body"]}},
+    # Not in the gate's policy: it lands in the review queue on first use.
+    {"name": "post_to_slack", "description": "Post a message to a Slack channel in the company workspace.",
+     "input_schema": {"type": "object", "properties": {"channel": {"type": "string"}, "text": {"type": "string"}},
+                      "required": ["channel", "text"]}},
 ]
 
 
@@ -34,6 +38,9 @@ def run_tool(name, args):
     if name == "send_email":
         print(f"!!! send_email executed: {json.dumps(args)}")
         return "sent"
+    if name == "post_to_slack":
+        print(f"posted to {args['channel']}: {args['text']}")
+        return "posted"
     return f"unknown tool {name}"
 
 

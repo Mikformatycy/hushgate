@@ -31,7 +31,10 @@ docker compose -f docker-compose.corp.yml up -d --build   # dashboard on :3000 (
 docker compose -f docker-compose.corp.yml exec jdoe-macbook python laptop.py all
 docker compose -f docker-compose.corp.yml exec guest-laptop python laptop.py all
 docker compose -f docker-compose.corp.yml exec jdoe-macbook python laptop.py claude attack
+docker compose -f docker-compose.corp.yml exec jdoe-macbook python laptop.py claude "post to slack"  # unknown tool -> Review page
 ```
+
+Export `ANTHROPIC_API_KEY` before `up` to have the AI advisor suggest decisions on the Review page.
 
 | | `jdoe-macbook` (allowlisted) | `guest-laptop` (not registered) |
 |---|---|---|
@@ -50,6 +53,7 @@ LLM traffic is recognized by its shape (paths, headers, `messages[].role` in the
 - **Egress**: the agent sits on an `internal` Docker network; the proxy is its only reachable host.
 
 - **Forward proxy** (`:3128`, enabled by `CA_CERT_FILE`): decrypts TLS with the company CA, identifies the node from the proxy credentials (`NODES_FILE`), blocks LLM traffic from unknown nodes or to hosts outside `APPROVED_LLM_HOSTS`, and sends approved LLM traffic through the gateway above. Other traffic passes through.
+- **Review queue + AI advisor** (`advisor/`): cases the rules can't settle (tools missing from the policy, variables no rule recognized) wait on the Review page under the safe default. The advisor asks Claude for a suggestion with a one-line rationale. It sees tool definitions and a value's *shape* (`payments-oncall` → `a8-a6`), never secret values, and its `ADVISOR_TOKEN` can post suggestions but not apply them. A person applies or overrides; enforcement stays rule-based. Needs `ANTHROPIC_API_KEY`; without it the advisor idles and reviews stay manual.
 - **Admin API** (`:8081`, needs `ADMIN_TOKEN`): events, agents, reset, config. The dashboard's nginx attaches the token, so the browser and the agent never see it.
 
 ## Development

@@ -9,6 +9,7 @@ services:
       REDIS_ADDR: redis:6379
       TOKEN_LIMIT: ${TOKEN_LIMIT:-200000}
       ADMIN_TOKEN: ${ADMIN_TOKEN:-demo-admin-token}
+      ADVISOR_TOKEN: ${ADVISOR_TOKEN:-demo-advisor-token}
     volumes:
       - ./demo/workspace/.env:/vault/.env:ro
       - ./proxy/policy.json:/etc/gate/policy.json:ro
@@ -24,6 +25,17 @@ services:
       ADMIN_TOKEN: ${ADMIN_TOKEN:-demo-admin-token}
     ports:
       - "3000:80"
+    networks: [backend, egress]
+    depends_on: [proxy]
+
+  # AI policy advisor: suggests decisions for the review queue. Its token can
+  # only read reviews and post suggestions; a human applies them.
+  advisor:
+    build: ./advisor
+    environment:
+      GATE_ADMIN_URL: http://proxy:8081
+      ADVISOR_TOKEN: ${ADVISOR_TOKEN:-demo-advisor-token}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     networks: [backend, egress]
     depends_on: [proxy]
 

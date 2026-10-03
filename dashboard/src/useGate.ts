@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, type Agent, type Config, type GateEvent } from './api'
+import { api, type Agent, type Config, type GateEvent, type Review } from './api'
 
 const MAX_EVENTS = 2000
 
@@ -8,6 +8,7 @@ export function useGate() {
   const [events, setEvents] = useState<GateEvent[]>([])
   const [agents, setAgents] = useState<Agent[]>([])
   const [config, setConfig] = useState<Config | null>(null)
+  const [reviews, setReviews] = useState<Review[]>([])
   const [error, setError] = useState<string | null>(null)
   const lastId = useRef(0)
 
@@ -31,8 +32,10 @@ export function useGate() {
     }
     const pollAgents = async () => {
       try {
-        const a = await api.agents()
-        if (alive) setAgents(a)
+        const [a, r] = await Promise.all([api.agents(), api.reviews()])
+        if (!alive) return
+        setAgents(a)
+        setReviews(r)
       } catch (e) {
         if (alive) setError(String(e))
       }
@@ -50,5 +53,7 @@ export function useGate() {
   }, [])
 
   const refreshAgents = () => api.agents().then(setAgents)
-  return { events, agents, config, error, refreshAgents }
+  // After a review decision the vault and policy change, so reload both.
+  const refreshReviews = () => Promise.all([api.reviews().then(setReviews), api.config().then(setConfig)])
+  return { events, agents, config, reviews, error, refreshAgents, refreshReviews }
 }
