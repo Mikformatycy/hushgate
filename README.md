@@ -12,7 +12,15 @@ docker compose exec agent python agent.py --egress-check   # should be blocked
 docker compose logs -f proxy                               # audit events (JSON lines)
 ```
 
-Reset a killed agent: `docker compose exec redis redis-cli del gate:killed:demo-agent gate:tokens:demo-agent`
+Dashboard: http://localhost:3000 (reset halted agents from the Agents page).
+
+Offline, without an API key, against a scripted fake model:
+
+```sh
+python3 demo/fake_upstream.py &
+ANTHROPIC_API_KEY=x UPSTREAM_URL=http://host.docker.internal:9999 docker compose up -d --build
+docker compose exec agent python agent.py "attack"
+```
 
 ## How it works
 
@@ -21,8 +29,11 @@ Reset a killed agent: `docker compose exec redis redis-cli del gate:killed:demo-
 - **Budgets**: per-agent token counters in Redis (`TOKEN_LIMIT`), agent picked by the `X-Agent-Id` header.
 - **Egress**: the agent sits on an `internal` Docker network; the proxy is its only reachable host.
 
-## Proxy
+- **Admin API** (`:8081`, needs `ADMIN_TOKEN`): events, agents, reset, config. The dashboard's nginx attaches the token, so the browser and the agent never see it.
+
+## Development
 
 ```sh
 cd proxy && go test ./...
+cd dashboard && npm install && npm run dev   # proxies /api to localhost:8081, token from ADMIN_TOKEN
 ```

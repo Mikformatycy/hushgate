@@ -2,12 +2,13 @@ services:
   proxy:
     build: ./proxy
     environment:
-      UPSTREAM_URL: https://api.anthropic.com
+      UPSTREAM_URL: ${UPSTREAM_URL:-https://api.anthropic.com}
       UPSTREAM_API_KEY: ${ANTHROPIC_API_KEY:?set ANTHROPIC_API_KEY}
       VAULT_ENV_FILES: /vault/.env
       POLICY_FILE: /etc/gate/policy.json
       REDIS_ADDR: redis:6379
       TOKEN_LIMIT: ${TOKEN_LIMIT:-200000}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-demo-admin-token}
     volumes:
       - ./demo/workspace/.env:/vault/.env:ro
       - ./proxy/policy.json:/etc/gate/policy.json:ro
@@ -15,6 +16,16 @@ services:
       - "8080:8080"
     networks: [sandbox, backend, egress]
     depends_on: [redis]
+
+  dashboard:
+    build: ./dashboard
+    environment:
+      GATE_ADMIN_URL: http://proxy:8081
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-demo-admin-token}
+    ports:
+      - "3000:80"
+    networks: [backend, egress]
+    depends_on: [proxy]
 
   redis:
     image: redis:7-alpine
