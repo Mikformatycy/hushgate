@@ -1,0 +1,255 @@
+// Package vault replaces sensitive values with stable placeholders before
+// they leave the machine and swaps them back for approved local sinks.
+package vault
+
+import (
+	"bufio"
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"os"
+	"regexp"
+	"sort"
+	"strings"
+	"sync"
+)
+
+var tokenRe = regexp.MustCompile(`\{\{VAULT_[A-Z0-9_]+\}\}`)
+
+type entry struct {
+	Name    string
+	Tier    Tier
+	Token   string
+	raw     string
+	escaped string // JSON-string-escaped form, without quotes
+}
+
+// Ref describes a placeholder found in some text. It never carries the value.
+type Ref struct {
+	Name  string
+	Tier  Tier
+	Token string
+}
+
+type Vault struct {
+	maskFrom Tier
+
+	mu      sync.RWMutex
+	byToken map[string]*entry
+	ordered []*entry // env entries to mask, longest value first
+}
+
+// New creates a vault that masks values at or above maskFrom.
+func New(maskFrom Tier) *Vault {
+	return &Vault{maskFrom: maskFrom, byToken: map[string]*entry{}}
+}
+
+// Add registers a named value. Values below the mask threshold are ignored.
+func (v *Vault) Add(name, value string, tier Tier) {
+	if tier < v.maskFrom || len(value) < 4 {
+		return
+	}
+	e := &entry{
+		Name:    name,
+		Tier:    tier,
+		Token:   "{{VAULT_ENV_" + tokenName(name) + "}}",
+		raw:     value,
+		escaped: jsonEscape(value),
+	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.byToken[e.Token] = e
+	v.ordered = append(v.ordered, e)
+	sort.Slice(v.ordered, func(i, j int) bool { return len(v.ordered[i].raw) > len(v.ordered[j].raw) })
+}
+
+// Mask replaces every known or detected secret in a JSON body with its
+// placeholder and returns the refs that were applied.
+func (v *Vault) Mask(body []byte) ([]byte, []Ref) {
+	var refs []Ref
+	v.mu.RLock()
+	for _, e := range v.ordered {
+		hit := false
+		for _, form := range []string{e.escaped, e.raw} {
+			if bytes.Contains(body, []byte(form)) {
+				body = bytes.ReplaceAll(body, []byte(form), []byte(e.Token))
+				hit = true
+			}
+		}
+		if hit {
+			refs = append(refs, e.ref())
+		}
+	}
+	v.mu.RUnlock()
+
+	for _, re := range detectors {
+		body = re.ReplaceAllFunc(body, func(m []byte) []byte {
+			e := v.dynamic(string(m))
+			refs = append(refs, e.ref())
+			return []byte(e.Token)
+		})
+	}
+	body = replaceSubmatch(dsnPassword, body, func(m []byte) []byte {
+		if tokenRe.Match(m) {
+			return m
+		}
+		e := v.dynamic(string(m))
+		refs = append(refs, e.ref())
+		return []byte(e.Token)
+	})
+	return body, refs
+}
+
+// Tokens lists the known placeholders present in s.
+func (v *Vault) Tokens(s string) []Ref {
+	var refs []Ref
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	for _, tok := range tokenRe.FindAllString(s, -1) {
+		if e, ok := v.byToken[tok]; ok {
+			refs = append(refs, e.ref())
+		}
+	}
+	return refs
+}
+
+// RehydrateJSON swaps placeholders inside JSON text back to real values.
+func (v *Vault) RehydrateJSON(s string) string {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	return tokenRe.ReplaceAllStringFunc(s, func(tok string) string {
+		if e, ok := v.byToken[tok]; ok {
+			return e.escaped
+		}
+		return tok
+	})
+}
+
+// dynamic registers a detector match. matched is already JSON-escaped since
+// it was found in a JSON body. Tokens are hash-based so they stay stable
+// across requests (keeps prompt caching intact).
+func (v *Vault) dynamic(matched string) *entry {
+	sum := sha256.Sum256([]byte(matched))
+	tok := "{{VAULT_DYN_" + strings.ToUpper(hex.EncodeToString(sum[:4])) + "}}"
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if e, ok := v.byToken[tok]; ok {
+		return e
+	}
+	e := &entry{Name: "detected", Tier: Secret, Token: tok, raw: matched, escaped: matched}
+	v.byToken[tok] = e
+	return e
+}
+
+func (e *entry) ref() Ref { return Ref{Name: e.Name, Tier: e.Tier, Token: e.Token} }
+
+// Var is the loader's view of a variable, safe to log (no value).
+type Var struct {
+	Name string
+	Tier Tier
+}
+
+// LoadEnvFile reads KEY=VALUE lines, classifies them and adds them to the
+// vault. A trailing "# @class: C3" comment overrides classification.
+func (v *Vault) LoadEnvFile(path string) ([]Var, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var vars []Var
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 64*1024), 1024*1024)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		line = strings.TrimPrefix(line, "export ")
+		name, rest, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		name = strings.TrimSpace(name)
+		value, comment := splitValue(strings.TrimSpace(rest))
+		tier := Classify(name, value)
+		if _, ann, ok := strings.Cut(comment, "@class:"); ok {
+			if t, ok := ParseTier(ann); ok {
+				tier = t
+			}
+		}
+		v.Add(name, value, tier)
+		vars = append(vars, Var{Name: name, Tier: tier})
+	}
+	return vars, sc.Err()
+}
+
+func splitValue(s string) (value, comment string) {
+	if len(s) > 0 && s[0] == '\'' {
+		if end := strings.IndexByte(s[1:], '\''); end >= 0 {
+			return s[1 : end+1], s[end+2:]
+		}
+	}
+	if len(s) > 0 && s[0] == '"' {
+		var b strings.Builder
+		for i := 1; i < len(s); i++ {
+			switch {
+			case s[i] == '\\' && i+1 < len(s):
+				i++
+				if s[i] == 'n' {
+					b.WriteByte('\n')
+				} else {
+					b.WriteByte(s[i])
+				}
+			case s[i] == '"':
+				return b.String(), s[i+1:]
+			default:
+				b.WriteByte(s[i])
+			}
+		}
+	}
+	if i := strings.Index(s, " #"); i >= 0 {
+		return strings.TrimSpace(s[:i]), s[i:]
+	}
+	return s, ""
+}
+
+func tokenName(name string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z':
+			return r - 32
+		case (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9'):
+			return r
+		}
+		return '_'
+	}, name)
+}
+
+func jsonEscape(s string) string {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(s)
+	out := strings.TrimSuffix(buf.String(), "\n")
+	return out[1 : len(out)-1]
+}
+
+// replaceSubmatch replaces only capture group 1 of each match.
+func replaceSubmatch(re *regexp.Regexp, src []byte, fn func([]byte) []byte) []byte {
+	idx := re.FindAllSubmatchIndex(src, -1)
+	if idx == nil {
+		return src
+	}
+	var out bytes.Buffer
+	last := 0
+	for _, m := range idx {
+		out.Write(src[last:m[2]])
+		out.Write(fn(src[m[2]:m[3]]))
+		last = m[3]
+	}
+	out.Write(src[last:])
+	return out.Bytes()
+}
