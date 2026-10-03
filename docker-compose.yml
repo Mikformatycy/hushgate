@@ -3,7 +3,7 @@ services:
     build: ./proxy
     environment:
       UPSTREAM_URL: ${UPSTREAM_URL:-https://api.anthropic.com}
-      UPSTREAM_API_KEY: ${ANTHROPIC_API_KEY:?set ANTHROPIC_API_KEY}
+      UPSTREAM_API_KEY: ${ANTHROPIC_API_KEY:-}
       VAULT_ENV_FILES: /vault/.env
       POLICY_FILE: /etc/gate/policy.json
       REDIS_ADDR: redis:6379
