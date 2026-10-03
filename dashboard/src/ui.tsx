@@ -121,7 +121,7 @@ export function EventStatus({ e }: { e: GateEvent }) {
     case 'suggestion':
       return <Status tone="info">AI suggestion</Status>
     case 'injection':
-      return <Status tone="warn">Injection warning</Status>
+      return <Status tone="warn">Prompt injection</Status>
     case 'review':
       return <Status tone="ok">Reviewed</Status>
     default:
@@ -170,7 +170,7 @@ export function eventMessage(e: GateEvent): ReactNode {
     case 'injection':
       return (
         <>
-          <Mono>{e.tool}</Mono> — {e.reason}
+          In <Mono>{e.tool}</Mono>: {e.reason}
         </>
       )
     case 'shadow_ai':

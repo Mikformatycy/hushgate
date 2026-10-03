@@ -74,11 +74,11 @@ export default function App() {
               <span className="text-lg leading-5 text-[#8d6605]">⚠</span>
               <div className="flex-1">
                 <p className="font-bold">
-                  Possible prompt injection reached agent "{w.agent}"
+                  Prompt injection in <Mono>{w.tool}</Mono>
                 </p>
                 <p className="text-sm text-gray-700">
-                  <Mono>{w.tool}</Mono> {w.reason}. Early warning from the AI advisor: nothing is blocked by this alert,
-                  the policy still decides every action.
+                  Read by agent "{w.agent}": {w.reason}. The agent is the target of this attack, not its source. This
+                  warning blocks nothing; the policy still decides every action.
                 </p>
               </div>
               <button

@@ -147,8 +147,8 @@ func (a *API) scanResult(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Injection >= a.InjectionAt {
 		a.Audit.Record(audit.Event{Agent: it.Agent, Kind: "injection", Tool: it.Source,
-			Reason: fmt.Sprintf("instructions aimed at an AI found in content the agent read (p=%.2f, %s, flagged %d ms after it arrived)",
-				req.Injection, req.Model, time.Since(it.ObservedAt).Milliseconds())})
+			Reason: fmt.Sprintf("the content contains hidden instructions for an AI (%.0f%%, %s), flagged %d ms after the agent received it",
+				req.Injection*100, req.Model, time.Since(it.ObservedAt).Milliseconds())})
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
