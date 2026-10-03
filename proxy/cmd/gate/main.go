@@ -10,13 +10,14 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Mikformatycy/hushgate/proxy/internal/admin"
 	"github.com/Mikformatycy/hushgate/proxy/internal/audit"
 	"github.com/Mikformatycy/hushgate/proxy/internal/budget"
+	"github.com/Mikformatycy/hushgate/proxy/internal/config"
+	"github.com/Mikformatycy/hushgate/proxy/internal/engine"
 	"github.com/Mikformatycy/hushgate/proxy/internal/forward"
 	"github.com/Mikformatycy/hushgate/proxy/internal/gateway"
 	"github.com/Mikformatycy/hushgate/proxy/internal/policy"
@@ -29,43 +30,6 @@ func main() {
 	upstream, err := url.Parse(env("UPSTREAM_URL", "https://api.anthropic.com"))
 	if err != nil {
 		log.Fatalf("UPSTREAM_URL: %v", err)
-	}
-	maskFrom, ok := vault.ParseTier(env("MASK_FROM_TIER", "C2"))
-	if !ok {
-		log.Fatal("MASK_FROM_TIER must be C0..C3")
-	}
-	limit, err := strconv.ParseInt(env("TOKEN_LIMIT", "0"), 10, 64)
-	if err != nil {
-		log.Fatalf("TOKEN_LIMIT: %v", err)
-	}
-
-	v := vault.New(maskFrom)
-	reviews := review.NewStore()
-	scans := scan.NewStore(500)
-	injectionAt, err := strconv.ParseFloat(env("INJECTION_ALERT_THRESHOLD", "0.8"), 64)
-	if err != nil {
-		log.Fatalf("INJECTION_ALERT_THRESHOLD: %v", err)
-	}
-	for _, path := range strings.Split(os.Getenv("VAULT_ENV_FILES"), ",") {
-		if path = strings.TrimSpace(path); path == "" {
-			continue
-		}
-		vars, err := v.LoadEnvFile(path)
-		if err != nil {
-			log.Fatalf("load %s: %v", path, err)
-		}
-		for _, x := range vars {
-			log.Printf("vault: %s %s (%s)", x.Tier, x.Name, x.Reason)
-			if x.Reason == vault.FallbackReason {
-				val, _ := v.Value(x.Name)
-				reviews.ObserveVariable(x.Name, val, x.Tier.String()+" (masked by default)")
-			}
-		}
-	}
-
-	pol, err := policy.Load(os.Getenv("POLICY_FILE"))
-	if err != nil {
-		log.Fatalf("policy: %v", err)
 	}
 
 	var store budget.Store = budget.NewMemory()
@@ -82,47 +46,62 @@ func main() {
 	ring := audit.NewRing(2000)
 	logger := audit.Multi{audit.NewJSONLogger(os.Stdout), ring}
 
+	// Everything a security team tunes lives in one policy file, reloaded
+	// live. Environment variables only carry deployment settings.
+	eng := &engine.Engine{
+		Policy:  &policy.Policy{},
+		Vault:   vault.New(vault.Confidential),
+		Reviews: review.NewStore(),
+		Nodes:   forward.NewRegistry(nil),
+	}
+	policyPath := env("HUSHGATE_POLICY", "/etc/hushgate/hushgate.yaml")
+	live := config.NewLive(policyPath, eng.Apply, func(action, detail string) {
+		logger.Record(audit.Event{Agent: "hushgate.yaml", Kind: "policy", Action: action, Reason: detail})
+	})
+	if err := live.Load(); err != nil {
+		log.Fatalf("policy %s: %v", policyPath, err)
+	}
+	for _, x := range eng.Vault.Vars() {
+		log.Printf("vault: %s %s (%s)", x.Tier, x.Name, x.Reason)
+	}
+	log.Printf("policy %s loaded (version %s), watching for changes", policyPath, live.Status().Version)
+	go live.Watch(context.Background(), time.Second)
+
 	transport, err := upstreamTransport(os.Getenv("UPSTREAM_CA_FILES"))
 	if err != nil {
 		log.Fatalf("UPSTREAM_CA_FILES: %v", err)
 	}
+	scans := scan.NewStore(500)
 
 	gw := &gateway.Gateway{
 		Upstream:    upstream,
 		UpstreamKey: os.Getenv("UPSTREAM_API_KEY"),
-		TokenLimit:  limit,
+		Limits:      func(agent string) int64 { return live.Get().LimitFor(agent) },
+		ModelOK:     func(model string) bool { return live.Get().ModelAllowed(model) },
 		Client:      &http.Client{Transport: transport},
-		Vault:       v,
-		Policy:      pol,
+		Vault:       eng.Vault,
+		Policy:      eng.Policy,
 		Budget:      store,
 		Audit:       logger,
-		Reviews:     reviews,
+		Reviews:     eng.Reviews,
 		Scans:       scans,
 	}
 
-	nodes, err := forward.LoadNodes(os.Getenv("NODES_FILE"))
-	if err != nil {
-		log.Fatalf("NODES_FILE: %v", err)
-	}
 	if caCert := os.Getenv("CA_CERT_FILE"); caCert != "" {
 		fp, err := forward.New(caCert, os.Getenv("CA_KEY_FILE"))
 		if err != nil {
 			log.Fatal(err)
 		}
-		fp.Nodes, fp.Gateway, fp.Transport, fp.Audit = nodes, gw, transport, logger
-		fp.Approved = map[string]bool{}
-		for _, h := range strings.Split(env("APPROVED_LLM_HOSTS", "api.anthropic.com"), ",") {
-			fp.Approved[strings.TrimSpace(h)] = true
-		}
+		fp.Nodes, fp.Gateway, fp.Transport, fp.Audit = eng.Nodes, gw, transport, logger
+		fp.Approved = func(host string) bool { return live.Get().HostApproved(host) }
 		fwdAddr := env("FORWARD_ADDR", ":3128")
-		log.Printf("forward proxy (TLS inspection) listening on %s, %d nodes allowlisted", fwdAddr, len(nodes.List()))
+		log.Printf("forward proxy (TLS inspection) listening on %s, %d nodes allowlisted", fwdAddr, len(eng.Nodes.List()))
 		go func() { log.Fatal(http.ListenAndServe(fwdAddr, fp)) }()
 	}
 
 	if token := os.Getenv("ADMIN_TOKEN"); token != "" {
 		api := &admin.API{Token: token, AdvisorToken: os.Getenv("ADVISOR_TOKEN"), Events: ring, Budget: store,
-			Audit: logger, Vault: v, Policy: pol, Reviews: reviews, Scans: scans, InjectionAt: injectionAt,
-			TokenLimit: limit, Nodes: nodes.List()}
+			Audit: logger, Vault: eng.Vault, Policy: eng.Policy, Reviews: eng.Reviews, Scans: scans, Live: live}
 		adminAddr := env("ADMIN_ADDR", ":8081")
 		log.Printf("admin api listening on %s", adminAddr)
 		go func() { log.Fatal(http.ListenAndServe(adminAddr, api.Handler())) }()

@@ -76,25 +76,6 @@ func (v *Vault) add(name, value string, tier Tier, reason string) {
 	v.rebuild()
 }
 
-// SetTier reclassifies a loaded variable at runtime (after a human approves a
-// review) and records why.
-func (v *Vault) SetTier(name string, tier Tier, reason string) bool {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	e, ok := v.env[name]
-	if !ok {
-		return false
-	}
-	e.Tier = tier
-	for i := range v.vars {
-		if v.vars[i].Name == name {
-			v.vars[i].Tier, v.vars[i].Reason = tier, reason
-		}
-	}
-	v.rebuild()
-	return true
-}
-
 // Vars lists loaded variables with their current tier and deciding rule.
 func (v *Vault) Vars() []Var {
 	v.mu.RLock()
@@ -115,7 +96,61 @@ func (v *Vault) Value(name string) (string, bool) {
 }
 
 // MaskFrom is the lowest tier that gets masked.
-func (v *Vault) MaskFrom() Tier { return v.maskFrom }
+func (v *Vault) MaskFrom() Tier {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	return v.maskFrom
+}
+
+// SetMaskFrom changes the masking threshold at runtime (live policy reload).
+func (v *Vault) SetMaskFrom(t Tier) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.maskFrom = t
+	v.rebuild()
+}
+
+// LoadEnvFiles replaces every loaded variable with the contents of files,
+// applying overrides (name -> tier) on top of the rules. Detected values
+// (API keys, IBANs found in traffic) are kept.
+func (v *Vault) LoadEnvFiles(files []string, overrides map[string]Tier) ([]Var, error) {
+	type pv struct {
+		v     Var
+		value string
+	}
+	var parsed []pv
+	for _, f := range files {
+		vars, values, err := parseEnvFile(f)
+		if err != nil {
+			return nil, err
+		}
+		for i, x := range vars {
+			if t, ok := overrides[x.Name]; ok {
+				x.Tier, x.Reason = t, "set in hushgate.yaml"
+			}
+			parsed = append(parsed, pv{x, values[i]})
+		}
+	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	for _, e := range v.env {
+		delete(v.byToken, e.Token)
+	}
+	v.env, v.vars = map[string]*entry{}, nil
+	out := make([]Var, 0, len(parsed))
+	for _, p := range parsed {
+		e := &entry{Name: p.v.Name, Tier: p.v.Tier, Token: "{{VAULT_ENV_" + tokenName(p.v.Name) + "}}",
+			raw: p.value, escaped: jsonEscape(p.value)}
+		if _, dup := v.env[p.v.Name]; !dup {
+			v.vars = append(v.vars, p.v)
+		}
+		v.env[p.v.Name] = e
+		v.byToken[e.Token] = e
+		out = append(out, p.v)
+	}
+	v.rebuild()
+	return out, nil
+}
 
 // rebuild recomputes the mask list; caller holds v.mu.
 func (v *Vault) rebuild() {
@@ -214,13 +249,24 @@ type Var struct {
 // LoadEnvFile reads KEY=VALUE lines, classifies them and adds them to the
 // vault. A trailing "# @class: C3" comment overrides classification.
 func (v *Vault) LoadEnvFile(path string) ([]Var, error) {
-	f, err := os.Open(path)
+	vars, values, err := parseEnvFile(path)
 	if err != nil {
 		return nil, err
 	}
+	for i, x := range vars {
+		v.add(x.Name, values[i], x.Tier, x.Reason)
+	}
+	return vars, nil
+}
+
+// parseEnvFile classifies each KEY=VALUE line; values[i] belongs to vars[i].
+func parseEnvFile(path string) (vars []Var, values []string, err error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, nil, err
+	}
 	defer f.Close()
 
-	var vars []Var
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 64*1024), 1024*1024)
 	for sc.Scan() {
@@ -241,10 +287,10 @@ func (v *Vault) LoadEnvFile(path string) ([]Var, error) {
 				tier, reason = t, "annotated @class: "+t.String()+" in .env"
 			}
 		}
-		v.add(name, value, tier, reason)
 		vars = append(vars, Var{Name: name, Tier: tier, Reason: reason})
+		values = append(values, value)
 	}
-	return vars, sc.Err()
+	return vars, values, sc.Err()
 }
 
 func splitValue(s string) (value, comment string) {

@@ -32,7 +32,7 @@ import (
 
 type Proxy struct {
 	Nodes     *Registry
-	Approved  map[string]bool // LLM provider hosts nodes may use
+	Approved  func(host string) bool // LLM provider hosts nodes may use (live policy)
 	Gateway   *gateway.Gateway
 	Transport http.RoundTripper
 	Audit     audit.Logger
@@ -129,7 +129,7 @@ func (p *Proxy) handle(w http.ResponseWriter, r *http.Request, scheme, hostport 
 		p.Audit.Record(audit.Event{Agent: p.describe(r.RemoteAddr), Kind: "node_blocked", Host: host,
 			Reason: fmt.Sprintf("%s LLM request from a device not on the agent allowlist (%s)", m.Format, m.Signal)})
 		deny(w, m.Format, "this device is not registered as an agent node")
-	case !p.Approved[host]:
+	case !p.Approved(host):
 		p.Audit.Record(audit.Event{Agent: node.ID, Kind: "shadow_ai", Host: host,
 			Reason: fmt.Sprintf("%s LLM request to unapproved host (%s)", m.Format, m.Signal)})
 		deny(w, m.Format, host+" is not an approved LLM provider")

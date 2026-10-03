@@ -24,8 +24,10 @@ const maxBody = 64 << 20
 
 type Gateway struct {
 	Upstream    *url.URL
-	UpstreamKey string // if set, replaces the agent's x-api-key so agents never hold the real key
-	TokenLimit  int64  // per agent; 0 = unlimited
+	UpstreamKey string                   // if set, replaces the agent's x-api-key so agents never hold the real key
+	TokenLimit  int64                    // per agent; 0 = unlimited (used when Limits is nil)
+	Limits      func(agent string) int64 // optional per-agent budgets from the live policy
+	ModelOK     func(model string) bool  // optional allowed-models check from the live policy
 	Client      *http.Client
 	Vault       *vault.Vault
 	Policy      *policy.Policy
@@ -63,10 +65,14 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusForbidden, "permission_error", "hushgate: agent halted: "+st.KillReason)
 		return
 	}
-	if g.TokenLimit > 0 && st.Used >= g.TokenLimit {
+	limit := g.TokenLimit
+	if g.Limits != nil {
+		limit = g.Limits(agent)
+	}
+	if limit > 0 && st.Used >= limit {
 		g.Audit.Record(audit.Event{Agent: agent, Kind: "denied", Reason: "token budget exhausted", Usage: st.Used})
 		apiError(w, http.StatusForbidden, "permission_error",
-			fmt.Sprintf("hushgate: token budget exhausted (%d/%d)", st.Used, g.TokenLimit))
+			fmt.Sprintf("hushgate: token budget exhausted (%d/%d)", st.Used, limit))
 		return
 	}
 
@@ -74,6 +80,18 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		apiError(w, http.StatusBadRequest, "invalid_request_error", "hushgate: cannot read body")
 		return
+	}
+	if g.ModelOK != nil && strings.HasPrefix(r.URL.Path, "/v1/messages") {
+		var req struct {
+			Model string `json:"model"`
+		}
+		if json.Unmarshal(body, &req) == nil && req.Model != "" && !g.ModelOK(req.Model) {
+			g.Audit.Record(audit.Event{Agent: agent, Kind: "model_blocked", Tool: req.Model,
+				Reason: "model " + req.Model + " is not in models.allow"})
+			apiError(w, http.StatusForbidden, "permission_error",
+				"hushgate: model "+req.Model+" is not allowed by policy")
+			return
+		}
 	}
 	body, refs := g.Vault.Mask(body)
 	if len(refs) > 0 {

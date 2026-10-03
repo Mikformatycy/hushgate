@@ -135,6 +135,20 @@ func (s *Store) Resolve(id, status, decision string) (Item, error) {
 	return *it, nil
 }
 
+// Settle closes a pending item because the rule now exists in the policy
+// file (written by a reviewer or edited by hand). Unknown or decided ids are ignored.
+func (s *Store) Settle(id, decision string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	it, ok := s.items[id]
+	if !ok || it.Status != "pending" {
+		return false
+	}
+	now := time.Now()
+	it.Status, it.Decision, it.DecidedAt = "applied", decision, &now
+	return true
+}
+
 // Shape describes a value without revealing it: length, character classes,
 // entropy and a run-length pattern ("payments-oncall" -> "a8-a6").
 func Shape(v string) map[string]any {

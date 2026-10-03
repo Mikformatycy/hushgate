@@ -32,3 +32,18 @@ func TestDecide(t *testing.T) {
 		}
 	}
 }
+
+func TestTierActionsConfigurable(t *testing.T) {
+	p := &Policy{}
+	p.Replace(map[string]Sink{"send_email": Network}, Deny,
+		map[vault.Tier]Action{vault.Confidential: Allow, vault.Secret: Block})
+	if act, _, _ := p.Decide("send_email", []vault.Ref{{Tier: vault.Confidential}}); act != Allow {
+		t.Fatalf("C2 should be allowed by policy, got %s", act)
+	}
+	if act, _, _ := p.Decide("send_email", []vault.Ref{{Tier: vault.Secret}}); act != Block {
+		t.Fatalf("C3 should block instead of kill, got %s", act)
+	}
+	if act, _, _ := p.Decide("unknown", nil); act != Block {
+		t.Fatal("default deny not applied")
+	}
+}

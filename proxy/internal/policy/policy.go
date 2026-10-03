@@ -2,9 +2,6 @@
 package policy
 
 import (
-	"encoding/json"
-	"fmt"
-	"os"
 	"sync"
 
 	"github.com/Mikformatycy/hushgate/proxy/internal/vault"
@@ -31,25 +28,18 @@ type Policy struct {
 	mu      sync.RWMutex
 	Tools   map[string]Sink `json:"tools"`
 	Default Sink            `json:"default"`
+	// OnNetwork is the action when vaulted data of a tier is in a network
+	// tool call. Nil means the defaults: C2 block, C3 kill.
+	OnNetwork map[vault.Tier]Action `json:"-"`
 }
 
-// Load reads a JSON policy file. An empty path yields a permissive default.
-func Load(path string) (*Policy, error) {
-	p := &Policy{Tools: map[string]Sink{}, Default: Local}
-	if path == "" {
-		return p, nil
-	}
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	if err := json.Unmarshal(b, p); err != nil {
-		return nil, fmt.Errorf("parse policy: %w", err)
-	}
-	if p.Default == "" {
-		p.Default = Deny
-	}
-	return p, nil
+var defaultOnNetwork = map[vault.Tier]Action{vault.Confidential: Block, vault.Secret: Kill}
+
+// Replace swaps in a new rule set atomically (live policy reload).
+func (p *Policy) Replace(tools map[string]Sink, def Sink, onNetwork map[vault.Tier]Action) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.Tools, p.Default, p.OnNetwork = tools, def, onNetwork
 }
 
 func (p *Policy) SinkFor(tool string) Sink {
@@ -69,16 +59,6 @@ func (p *Policy) Has(tool string) bool {
 	return ok
 }
 
-// Set adds or changes a rule at runtime (after a human approves a review).
-func (p *Policy) Set(tool string, sink Sink) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.Tools == nil {
-		p.Tools = map[string]Sink{}
-	}
-	p.Tools[tool] = sink
-}
-
 // Snapshot is a copy that is safe to serialize.
 func (p *Policy) Snapshot() map[string]any {
 	p.mu.RLock()
@@ -87,7 +67,18 @@ func (p *Policy) Snapshot() map[string]any {
 	for k, v := range p.Tools {
 		tools[k] = v
 	}
-	return map[string]any{"tools": tools, "default": p.Default}
+	on := map[string]Action{}
+	for t, a := range p.onNetwork() {
+		on[t.String()] = a
+	}
+	return map[string]any{"tools": tools, "default": p.Default, "on_network_tool": on}
+}
+
+func (p *Policy) onNetwork() map[vault.Tier]Action {
+	if p.OnNetwork == nil {
+		return defaultOnNetwork
+	}
+	return p.OnNetwork
 }
 
 func ValidSink(s string) bool {
@@ -107,13 +98,23 @@ func (p *Policy) Decide(tool string, carried []vault.Ref) (act Action, rehydrate
 	case Deny:
 		return Block, false, "tool not permitted by policy"
 	case Network:
-		switch {
-		case highest >= vault.Secret:
-			return Kill, false, "vaulted secret in arguments of network tool"
-		case highest >= vault.Confidential:
-			return Block, false, "personal or confidential data in arguments of network tool"
+		if highest < 0 {
+			return Allow, false, "network tool, no secrets"
 		}
-		return Allow, false, "network tool, no secrets"
+		p.mu.RLock()
+		act, ok := p.onNetwork()[highest]
+		p.mu.RUnlock()
+		if !ok {
+			act = Allow
+		}
+		what := "personal or confidential data"
+		if highest >= vault.Secret {
+			what = "vaulted secret"
+		}
+		if act == Allow {
+			return Allow, false, what + " in arguments of network tool, allowed by policy for " + highest.String()
+		}
+		return act, false, what + " in arguments of network tool"
 	default:
 		return Allow, true, "local tool"
 	}
