@@ -25,9 +25,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/audit"
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/detect"
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/gateway"
+	"github.com/Mikformatycy/hushgate/proxy/internal/audit"
+	"github.com/Mikformatycy/hushgate/proxy/internal/detect"
+	"github.com/Mikformatycy/hushgate/proxy/internal/gateway"
 )
 
 type Proxy struct {
@@ -216,7 +216,7 @@ func (p *Proxy) describe(remoteAddr string) string {
 
 // deny answers in the error format the client's SDK expects.
 func deny(w http.ResponseWriter, format, msg string) {
-	msg = "provenance gate: " + msg
+	msg = "hushgate: " + msg
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusForbidden)
 	if format == "anthropic" {

@@ -3,7 +3,7 @@ package policy
 import (
 	"testing"
 
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/vault"
+	"github.com/Mikformatycy/hushgate/proxy/internal/vault"
 )
 
 func TestDecide(t *testing.T) {

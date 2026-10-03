@@ -1,4 +1,4 @@
-module github.com/Mikformatycy/goldman-sachs/proxy
+module github.com/Mikformatycy/hushgate/proxy
 
 go 1.26.8
 

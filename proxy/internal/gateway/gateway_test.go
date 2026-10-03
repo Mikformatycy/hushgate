@@ -10,12 +10,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/audit"
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/budget"
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/policy"
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/review"
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/scan"
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/vault"
+	"github.com/Mikformatycy/hushgate/proxy/internal/audit"
+	"github.com/Mikformatycy/hushgate/proxy/internal/budget"
+	"github.com/Mikformatycy/hushgate/proxy/internal/policy"
+	"github.com/Mikformatycy/hushgate/proxy/internal/review"
+	"github.com/Mikformatycy/hushgate/proxy/internal/scan"
+	"github.com/Mikformatycy/hushgate/proxy/internal/vault"
 )
 
 type nopAudit struct{ events []audit.Event }
@@ -104,7 +104,7 @@ func TestExfiltrationKills(t *testing.T) {
 	if strings.Contains(out, "hunter2-real") || strings.Contains(out, "evil@hacker.com") {
 		t.Fatalf("exfil call reached agent:\n%s", out)
 	}
-	if !strings.Contains(out, "[Provenance Gate] KILL") || !strings.Contains(out, `"stop_reason":"end_turn"`) {
+	if !strings.Contains(out, "[HushGate] KILL") || !strings.Contains(out, `"stop_reason":"end_turn"`) {
 		t.Fatalf("expected kill notice and end_turn:\n%s", out)
 	}
 	st, _ := store.Status(context.Background(), "a1")
@@ -139,7 +139,7 @@ func TestNetworkToolWithoutSecretAllowed(t *testing.T) {
 func TestDeniedToolBlockedNotKilled(t *testing.T) {
 	srv, store, _, _ := setup(t, sse("rm_rf", `{"path":"/"}`))
 	_, out := post(t, srv.URL)
-	if !strings.Contains(out, "[Provenance Gate] BLOCK") {
+	if !strings.Contains(out, "[HushGate] BLOCK") {
 		t.Fatalf("expected block:\n%s", out)
 	}
 	if st, _ := store.Status(context.Background(), "a1"); st.Killed {

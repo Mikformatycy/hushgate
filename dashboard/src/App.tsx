@@ -41,7 +41,7 @@ export default function App() {
         <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden>
           <path fill="#ff9900" d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3z" />
         </svg>
-        <span className="font-bold">Provenance Gate</span>
+        <span className="font-bold">HushGate</span>
         <span className="text-gray-400">AI Control Layer</span>
         <span className="ml-auto flex items-center gap-2 text-xs text-gray-300">
           <span className={`h-2 w-2 rounded-full ${error ? 'bg-bad' : 'bg-ok animate-pulse'}`} />
@@ -118,7 +118,7 @@ export default function App() {
           )}
 
           <p className="mb-1 text-sm text-gray-500">
-            Provenance Gate <span className="mx-1">›</span> <span className="text-gray-800">{page}</span>
+            HushGate <span className="mx-1">›</span> <span className="text-gray-800">{page}</span>
           </p>
           <h1 className="mb-5 text-2xl font-bold">{page}</h1>
 

@@ -7,7 +7,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/vault"
+	"github.com/Mikformatycy/hushgate/proxy/internal/vault"
 )
 
 // Sink says where a tool's arguments end up.

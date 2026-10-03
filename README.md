@@ -1,4 +1,4 @@
-# Provenance Gate
+# HushGate
 
 An AI control layer that sits between AI agents and LLM providers. Every request and every tool call an agent makes goes through it, so the organization can keep secrets and personal data away from the model, stop agents from taking actions they shouldn't, catch unapproved AI use, and cap spend. A dashboard shows what happened and why.
 
@@ -21,7 +21,7 @@ To run it and walk through the demo scenarios, see [INSTRUCTION.md](INSTRUCTION.
 flowchart LR
   subgraph Company network
     A[Agent / laptop] -->|all traffic| G
-    subgraph G[Provenance Gate]
+    subgraph G[HushGate]
       V[Vault: mask secrets and PII]
       P[Policy: check tool calls]
       B[Budgets and kill switch]

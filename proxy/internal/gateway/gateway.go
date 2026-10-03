@@ -12,12 +12,12 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/audit"
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/budget"
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/policy"
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/review"
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/scan"
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/vault"
+	"github.com/Mikformatycy/hushgate/proxy/internal/audit"
+	"github.com/Mikformatycy/hushgate/proxy/internal/budget"
+	"github.com/Mikformatycy/hushgate/proxy/internal/policy"
+	"github.com/Mikformatycy/hushgate/proxy/internal/review"
+	"github.com/Mikformatycy/hushgate/proxy/internal/scan"
+	"github.com/Mikformatycy/hushgate/proxy/internal/vault"
 )
 
 const maxBody = 64 << 20
@@ -55,24 +55,24 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	st, err := g.Budget.Status(ctx, agent)
 	if err != nil {
 		log.Printf("budget status: %v", err)
-		apiError(w, http.StatusServiceUnavailable, "api_error", "provenance gate: budget store unavailable")
+		apiError(w, http.StatusServiceUnavailable, "api_error", "hushgate: budget store unavailable")
 		return
 	}
 	if st.Killed {
 		g.Audit.Record(audit.Event{Agent: agent, Kind: "denied", Reason: "killed: " + st.KillReason})
-		apiError(w, http.StatusForbidden, "permission_error", "provenance gate: agent halted: "+st.KillReason)
+		apiError(w, http.StatusForbidden, "permission_error", "hushgate: agent halted: "+st.KillReason)
 		return
 	}
 	if g.TokenLimit > 0 && st.Used >= g.TokenLimit {
 		g.Audit.Record(audit.Event{Agent: agent, Kind: "denied", Reason: "token budget exhausted", Usage: st.Used})
 		apiError(w, http.StatusForbidden, "permission_error",
-			fmt.Sprintf("provenance gate: token budget exhausted (%d/%d)", st.Used, g.TokenLimit))
+			fmt.Sprintf("hushgate: token budget exhausted (%d/%d)", st.Used, g.TokenLimit))
 		return
 	}
 
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxBody))
 	if err != nil {
-		apiError(w, http.StatusBadRequest, "invalid_request_error", "provenance gate: cannot read body")
+		apiError(w, http.StatusBadRequest, "invalid_request_error", "hushgate: cannot read body")
 		return
 	}
 	body, refs := g.Vault.Mask(body)
@@ -87,7 +87,7 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	resp, err := g.forward(ctx, r, body)
 	if err != nil {
 		log.Printf("upstream: %v", err)
-		apiError(w, http.StatusBadGateway, "api_error", "provenance gate: upstream unreachable")
+		apiError(w, http.StatusBadGateway, "api_error", "hushgate: upstream unreachable")
 		return
 	}
 	defer resp.Body.Close()
@@ -114,7 +114,7 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case isMessages && resp.StatusCode == http.StatusOK && strings.HasPrefix(ct, "application/json"):
 		raw, err := io.ReadAll(resp.Body)
 		if err != nil {
-			apiError(w, http.StatusBadGateway, "api_error", "provenance gate: upstream read failed")
+			apiError(w, http.StatusBadGateway, "api_error", "hushgate: upstream read failed")
 			return
 		}
 		out, usage := g.filterMessage(ctx, agent, raw)
@@ -339,7 +339,7 @@ func sumUsage(u map[string]any) int64 {
 }
 
 func blockedText(tool string, act policy.Action, reason string) string {
-	return fmt.Sprintf("[Provenance Gate] %s call to tool %q: %s", strings.ToUpper(string(act)), tool, reason)
+	return fmt.Sprintf("[HushGate] %s call to tool %q: %s", strings.ToUpper(string(act)), tool, reason)
 }
 
 func tokenNames(refs []vault.Ref) []string {

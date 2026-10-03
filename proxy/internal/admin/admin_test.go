@@ -7,9 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/audit"
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/budget"
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/policy"
+	"github.com/Mikformatycy/hushgate/proxy/internal/audit"
+	"github.com/Mikformatycy/hushgate/proxy/internal/budget"
+	"github.com/Mikformatycy/hushgate/proxy/internal/policy"
 )
 
 func TestAPI(t *testing.T) {

@@ -1,4 +1,4 @@
-// Command gate runs the Provenance Gate proxy.
+// Command gate runs the HushGate proxy.
 package main
 
 import (
@@ -14,15 +14,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/admin"
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/audit"
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/budget"
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/forward"
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/gateway"
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/policy"
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/review"
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/scan"
-	"github.com/Mikformatycy/goldman-sachs/proxy/internal/vault"
+	"github.com/Mikformatycy/hushgate/proxy/internal/admin"
+	"github.com/Mikformatycy/hushgate/proxy/internal/audit"
+	"github.com/Mikformatycy/hushgate/proxy/internal/budget"
+	"github.com/Mikformatycy/hushgate/proxy/internal/forward"
+	"github.com/Mikformatycy/hushgate/proxy/internal/gateway"
+	"github.com/Mikformatycy/hushgate/proxy/internal/policy"
+	"github.com/Mikformatycy/hushgate/proxy/internal/review"
+	"github.com/Mikformatycy/hushgate/proxy/internal/scan"
+	"github.com/Mikformatycy/hushgate/proxy/internal/vault"
 )
 
 func main() {
@@ -131,7 +131,7 @@ func main() {
 	}
 
 	addr := env("LISTEN_ADDR", ":8080")
-	log.Printf("provenance gate listening on %s -> %s", addr, upstream)
+	log.Printf("hushgate listening on %s -> %s", addr, upstream)
 	log.Fatal(http.ListenAndServe(addr, gw))
 }
 
