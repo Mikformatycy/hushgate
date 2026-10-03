@@ -278,6 +278,7 @@ func (a *API) config(w http.ResponseWriter, r *http.Request) {
 		"models": cfg.Models.Allow, "llm_hosts": cfg.LLMHosts.Approved,
 		"injection_threshold": *cfg.Injection.AlertThreshold,
 		"nodes":               nodes, "detectors": detectors, "policy_file": a.Live.Status(),
+		"bash_guard": map[string]any{"tools": cfg.BashGuard.Tools, "network_commands": cfg.BashGuard.NetworkCommands},
 	})
 }
 

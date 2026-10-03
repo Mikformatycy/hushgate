@@ -32,6 +32,8 @@ docker compose -f docker-compose.corp.yml exec <laptop> python laptop.py <scenar
 | 5 | `guest-laptop` | `all` | Unregistered device on the network | Website loads; every LLM request blocked. Dashboard: Unknown device, Nodes page |
 | 6 | `jdoe-macbook` | `claude "post to slack"` | Agent uses a new tool nobody has reviewed | Blocked by default. Appears on the Review page with an AI suggestion. Apply it and run again: allowed |
 | 7 | `jdoe-macbook` | `claude attack` | Agent reads a report with a hidden prompt injection, then tries to email the `.env` secrets out | Amber injection warning about 0.5 s after the read (needs `TYPESAFE_API_KEY`), then the kill switch fires on `send_email`. The agent is halted |
+| 8 | `jdoe-macbook` | `claude "install the dev tool"` | Agent runs an installer piped into a shell (`curl … \| sh`) | Blocked by attack signature HG-RCE-001. The agent keeps running |
+| 9 | `jdoe-macbook` | `claude "upload the config"` | Agent sends the DB password with `curl` from its shell tool | The Bash guard treats the command as a network call: the secret is not restored and the kill switch fires |
 
 `all` runs scenarios 1–4 in sequence.
 
@@ -62,6 +64,8 @@ UPSTREAM_URL=http://host.docker.internal:9999 docker compose up -d --build
 | `docker compose exec agent python agent.py "write my config"` | Normal work with secrets | Allowed; password restored only in the local file |
 | `docker compose exec agent python agent.py "rm everything"` | Agent calls a forbidden tool | Blocked; agent keeps running |
 | `docker compose exec agent python agent.py "attack"` | Prompt injection and exfiltration attempt | Injection warning (needs `TYPESAFE_API_KEY`), then kill switch |
+| `docker compose exec agent python agent.py "install the dev tool"` | Installer piped into a shell | Blocked by attack signature HG-RCE-001 |
+| `docker compose exec agent python agent.py "upload the config"` | `curl` sending the DB password | Bash guard: treated as a network call, kill switch |
 | `docker compose exec agent python agent.py --egress-check` | Direct internet access | Fails |
 
 If `fake_upstream.py` fails with "Address already in use", an older copy is still running: `pkill -f fake_upstream.py` and start it again.
@@ -71,7 +75,7 @@ With a real Anthropic key instead of the fake model, drop `UPSTREAM_URL` and set
 ## Tests
 
 ```sh
-docker run --rm -v "$PWD/proxy":/src -w /src golang:1.26-alpine go test ./...
+docker run --rm -v "$PWD":/src -w /src/proxy golang:1.26-alpine go test ./...
 ```
 
 Or with Go 1.26 installed: `cd proxy && go test ./...`
@@ -85,7 +89,9 @@ Every control is in one file: `config/hushgate.yaml` (comments explain each sett
 - Editing the vault file `demo/workspace/.env` also reloads.
 - Applying a decision on the Review page writes it into the file.
 
-Things to try: set `Bash: deny`, restrict `models.allow` to `claude-haiku-*`, give an agent a tiny budget under `budgets.agents`, or change `masking.on_network_tool.C3` from `kill` to `block`.
+Things to try: set `Bash: deny`, restrict `models.allow` to `claude-haiku-*`, give an agent a tiny budget under `budgets.agents`, change `masking.on_network_tool.C3` from `kill` to `block`, or switch off a signature with `signatures.disabled: [HG-RCE-001]`.
+
+Attack signatures live in `config/signatures.yaml`, which also reloads live. The policy also lists the same feed on GitHub as a central source; the Signatures page shows each feed's version and status.
 
 Deployment settings (ports, Redis, upstream URL, certificates, tokens) stay in the compose files.
 

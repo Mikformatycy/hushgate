@@ -639,7 +639,7 @@ function SignaturesPage({ config, events }: { config: Config | null; events: Gat
         <Table head={['ID', 'Signature', 'Category', 'Severity', 'Action', 'Applies to', 'Hits']}>
           {sigs.map((s) => (
             <tr key={s.id} className={s.enabled ? '' : 'opacity-50'}>
-              <Td>
+              <Td className="whitespace-nowrap">
                 <Mono>{s.id}</Mono>
               </Td>
               <Td>
@@ -664,7 +664,7 @@ function SignaturesPage({ config, events }: { config: Config | null; events: Gat
         </Table>
       </Panel>
 
-      {config && (
+      {config?.bash_guard && (
         <Panel title="Bash guard">
           <p className="px-5 py-3 text-gray-600">
             Shell tools ({config.bash_guard.tools.map((t) => <Mono key={t}>{t}</Mono>)}) are local, but a command that runs
