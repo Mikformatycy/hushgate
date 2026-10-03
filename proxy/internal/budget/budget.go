@@ -4,6 +4,8 @@ package budget
 import (
 	"context"
 	"errors"
+	"sort"
+	"strings"
 	"sync"
 
 	"github.com/redis/go-redis/v9"
@@ -20,6 +22,7 @@ type Store interface {
 	AddUsage(ctx context.Context, agent string, tokens int64) (int64, error)
 	Kill(ctx context.Context, agent, reason string) error
 	Reset(ctx context.Context, agent string) error
+	Agents(ctx context.Context) ([]string, error)
 }
 
 // Redis stores counters under gate:tokens:<agent> and gate:killed:<agent>.
@@ -54,6 +57,20 @@ func (r *Redis) Kill(ctx context.Context, agent, reason string) error {
 
 func (r *Redis) Reset(ctx context.Context, agent string) error {
 	return r.c.Del(ctx, "gate:tokens:"+agent, "gate:killed:"+agent).Err()
+}
+
+func (r *Redis) Agents(ctx context.Context) ([]string, error) {
+	seen := map[string]bool{}
+	for _, prefix := range []string{"gate:tokens:", "gate:killed:"} {
+		iter := r.c.Scan(ctx, 0, prefix+"*", 100).Iterator()
+		for iter.Next(ctx) {
+			seen[strings.TrimPrefix(iter.Val(), prefix)] = true
+		}
+		if err := iter.Err(); err != nil {
+			return nil, err
+		}
+	}
+	return sortedKeys(seen), nil
 }
 
 // Memory is an in-process store for tests and running without Redis.
@@ -92,4 +109,26 @@ func (m *Memory) Reset(_ context.Context, agent string) error {
 	delete(m.used, agent)
 	delete(m.killed, agent)
 	return nil
+}
+
+func (m *Memory) Agents(_ context.Context) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	seen := map[string]bool{}
+	for a := range m.used {
+		seen[a] = true
+	}
+	for a := range m.killed {
+		seen[a] = true
+	}
+	return sortedKeys(seen), nil
+}
+
+func sortedKeys(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }

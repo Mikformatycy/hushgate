@@ -1,0 +1,14 @@
+server {
+  listen 80;
+  root /usr/share/nginx/html;
+
+  # The admin token stays server-side; the browser never sees it.
+  location /api/ {
+    proxy_pass ${GATE_ADMIN_URL};
+    proxy_set_header Authorization "Bearer ${ADMIN_TOKEN}";
+  }
+
+  location / {
+    try_files $uri /index.html;
+  }
+}
