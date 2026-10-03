@@ -176,3 +176,17 @@ func TestEditKeepsComments(t *testing.T) {
 		t.Fatal("invalid edit written")
 	}
 }
+
+func TestShippedPolicyIsValid(t *testing.T) {
+	b, err := os.ReadFile("../../../config/hushgate.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := Parse(b)
+	if err != nil {
+		t.Fatalf("config/hushgate.yaml is invalid: %v", err)
+	}
+	if len(c.Signatures.Feeds) == 0 || len(c.BashGuard.Tools) == 0 || len(c.Nodes) == 0 {
+		t.Fatalf("shipped policy lost a section: %+v", c)
+	}
+}

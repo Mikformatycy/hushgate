@@ -2,7 +2,7 @@ export type GateEvent = {
   id: number
   time: string
   agent: string
-  kind: 'mask' | 'tool_call' | 'usage' | 'denied' | 'reset' | 'shadow_ai' | 'node_blocked' | 'suggestion' | 'review' | 'injection' | 'policy' | 'model_blocked'
+  kind: 'mask' | 'tool_call' | 'usage' | 'denied' | 'reset' | 'shadow_ai' | 'node_blocked' | 'suggestion' | 'review' | 'injection' | 'policy' | 'model_blocked' | 'signature'
   host?: string
   tool?: string
   tool_id?: string
@@ -36,6 +36,24 @@ export type Config = {
   injection_threshold: number
   nodes: { id: string; owner: string }[] | null
   policy_file: { path: string; version: string; loaded_at: string; error?: string }
+  bash_guard: { tools: string[]; network_commands: string[] }
+}
+
+export type Signatures = {
+  feeds: { source: string; name: string; version: string; count: number; error?: string }[] | null
+  signatures:
+    | {
+        id: string
+        name: string
+        category: string
+        severity: 'low' | 'medium' | 'high' | 'critical'
+        action: 'alert' | 'block' | 'kill'
+        tools: string[]
+        description: string
+        reference?: string
+        enabled: boolean
+      }[]
+    | null
 }
 
 export type Review = {
@@ -71,6 +89,7 @@ export const api = {
   agents: () => get<Agent[]>('/api/agents'),
   config: () => get<Config>('/api/config'),
   reviews: () => get<Review[]>('/api/reviews'),
+  signatures: () => get<Signatures>('/api/signatures'),
   decide: async (id: string, action: 'apply' | 'dismiss', value?: string) => {
     const res = await fetch(`/api/reviews/${encodeURIComponent(id)}/decision`, {
       method: 'POST',

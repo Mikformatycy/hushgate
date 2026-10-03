@@ -126,6 +126,10 @@ export function EventStatus({ e }: { e: GateEvent }) {
       return e.action === 'rejected' ? <Status tone="bad">Policy rejected</Status> : <Status tone="info">Policy reloaded</Status>
     case 'model_blocked':
       return <Status tone="bad">Model blocked</Status>
+    case 'signature':
+      if (e.action === 'kill') return <Status tone="bad">Signature: kill</Status>
+      if (e.action === 'block') return <Status tone="bad">Signature: block</Status>
+      return <Status tone="warn">Signature: alert</Status>
     case 'review':
       return <Status tone="ok">Reviewed</Status>
     default:
@@ -175,6 +179,12 @@ export function eventMessage(e: GateEvent): ReactNode {
       return (
         <>
           In <Mono>{e.tool}</Mono>: {e.reason}
+        </>
+      )
+    case 'signature':
+      return (
+        <>
+          <Mono>{e.tool}</Mono> call matched {e.reason}
         </>
       )
     case 'policy':
