@@ -10,6 +10,7 @@ import (
 
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/audit"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/budget"
+	"github.com/Mikformatycy/goldman-sachs/proxy/internal/forward"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/policy"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/vault"
 )
@@ -23,6 +24,7 @@ type API struct {
 	MaskFrom   vault.Tier
 	Policy     *policy.Policy
 	TokenLimit int64
+	Nodes      []forward.Node
 }
 
 type agentView struct {
@@ -96,7 +98,7 @@ func (a *API) config(w http.ResponseWriter, r *http.Request) {
 	for _, v := range a.Vars {
 		vars = append(vars, varView{Name: v.Name, Tier: v.Tier.String()})
 	}
-	writeJSON(w, map[string]any{"vault": vars, "mask_from": a.MaskFrom.String(), "policy": a.Policy, "token_limit": a.TokenLimit})
+	writeJSON(w, map[string]any{"vault": vars, "mask_from": a.MaskFrom.String(), "policy": a.Policy, "token_limit": a.TokenLimit, "nodes": a.Nodes})
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

@@ -34,7 +34,7 @@ type Gateway struct {
 var hopHeaders = map[string]bool{
 	"Connection": true, "Keep-Alive": true, "Proxy-Connection": true, "Te": true, "Trailer": true,
 	"Transfer-Encoding": true, "Upgrade": true, "Host": true, "Content-Length": true,
-	"Accept-Encoding": true, "X-Agent-Id": true,
+	"Accept-Encoding": true, "X-Agent-Id": true, "Proxy-Authorization": true,
 }
 
 func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
