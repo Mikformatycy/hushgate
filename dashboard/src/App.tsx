@@ -379,8 +379,8 @@ function ReviewPage({ reviews, onDecided }: { reviews: Review[]; onDecided: () =
       <div className="mb-5 rounded-lg border-l-4 border-[#7d4dc0] bg-white px-5 py-3 text-gray-700 shadow-[0_1px_1px_rgba(0,28,36,.3)]">
         <b>AI suggests, a person decides, the rules enforce.</b> These are cases the deterministic rules could not settle:
         tools with no policy entry and variables no rule recognized. Until someone decides, the safe default applies. The
-        AI advisor never sees secret values (only tool definitions and a value's shape), and its credentials can post
-        suggestions but cannot apply them.
+        AI advisor (TypeSafe Jev, a classifier with calibrated probabilities) never sees secret values, only tool
+        definitions and a value's shape, and its credentials can post suggestions but cannot apply them.
       </div>
       <Panel title={`Pending review (${pending.length})`}>
         {pending.length === 0 && <p className="px-5 py-8 text-center text-gray-500">Nothing waiting for review.</p>}
@@ -482,9 +482,26 @@ function ReviewCard({ r, onDecided }: { r: Review; onDecided: () => void }) {
         {r.suggestion ? (
           <>
             <p className="font-bold">{optionLabel[r.suggestion.value] ?? r.suggestion.value}</p>
-            <p className="text-gray-700">{r.suggestion.rationale}</p>
-            <p className="mt-1 text-xs text-gray-500">
-              {r.suggestion.model} · {r.suggestion.confidence} confidence
+            {r.suggestion.rationale && <p className="text-gray-700">{r.suggestion.rationale}</p>}
+            <div className="mt-2 space-y-1">
+              {r.options.map((o) => {
+                const p = r.suggestion?.probabilities?.[o] ?? 0
+                return (
+                  <div key={o} className="flex items-center gap-2 text-xs">
+                    <span className="w-14 shrink-0 font-mono">{o}</span>
+                    <div className="h-2 flex-1 rounded bg-white">
+                      <div
+                        className={`h-2 rounded ${o === r.suggestion?.value ? 'bg-[#7d4dc0]' : 'bg-[#cdb8ea]'}`}
+                        style={{ width: `${p * 100}%` }}
+                      />
+                    </div>
+                    <span className="w-10 text-right tabular-nums">{(p * 100).toFixed(0)}%</span>
+                  </div>
+                )
+              })}
+            </div>
+            <p className="mt-2 text-xs text-gray-500">
+              TypeSafe {r.suggestion.model} · {(r.suggestion.confidence * 100).toFixed(0)}% confidence (calibrated)
             </p>
           </>
         ) : (

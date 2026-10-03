@@ -55,7 +55,7 @@ func TestAdvisorCanOnlySuggest(t *testing.T) {
 		t.Fatal("advisor changed policy")
 	}
 
-	if rec := do(h, "POST", "/api/reviews/tool:post_to_slack/suggestion", "advisor", `{"value":"network","rationale":"sends messages to an external service","confidence":"high","model":"m"}`); rec.Code != 200 {
+	if rec := do(h, "POST", "/api/reviews/tool:post_to_slack/suggestion", "advisor", `{"value":"network","probabilities":{"network":0.94,"local":0.05,"deny":0.01},"confidence":0.9,"model":"jev-1.13.0"}`); rec.Code != 200 {
 		t.Fatalf("suggest: %d %s", rec.Code, rec.Body)
 	}
 	if rec := do(h, "POST", "/api/reviews/tool:post_to_slack/suggestion", "advisor", `{"value":"allow-everything"}`); rec.Code != http.StatusConflict {

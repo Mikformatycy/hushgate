@@ -51,7 +51,7 @@ services:
     image: redis:7-alpine
     networks: [backend]
 
-  # AI policy advisor. Sits on mgmt only, so it reaches the real Claude API
+  # AI policy advisor (TypeSafe Jev). Sits on mgmt only, so it reaches the real Jev API
   # (not the simulated internet) and the gate's admin port with a
   # suggestion-only token.
   advisor:
@@ -59,7 +59,7 @@ services:
     environment:
       GATE_ADMIN_URL: http://gate:8081
       ADVISOR_TOKEN: ${ADVISOR_TOKEN:-demo-advisor-token}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
     networks: [mgmt]
     depends_on: [gate]
 

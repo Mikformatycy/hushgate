@@ -28,14 +28,14 @@ services:
     networks: [backend, egress]
     depends_on: [proxy]
 
-  # AI policy advisor: suggests decisions for the review queue. Its token can
+  # AI policy advisor (TypeSafe Jev): suggests decisions for the review queue. Its token can
   # only read reviews and post suggestions; a human applies them.
   advisor:
     build: ./advisor
     environment:
       GATE_ADMIN_URL: http://proxy:8081
       ADVISOR_TOKEN: ${ADVISOR_TOKEN:-demo-advisor-token}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
     networks: [backend, egress]
     depends_on: [proxy]
 

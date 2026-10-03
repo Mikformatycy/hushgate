@@ -7,6 +7,7 @@ package admin
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -105,8 +106,12 @@ func (a *API) suggest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	}
+	reason := sg.Rationale
+	if reason == "" {
+		reason = fmt.Sprintf("%.0f%% confidence (%s)", sg.Confidence*100, sg.Model)
+	}
 	a.Audit.Record(audit.Event{Agent: "ai-advisor", Kind: "suggestion", Tool: it.Subject, Action: sg.Value,
-		Reason: sg.Rationale})
+		Reason: reason})
 	writeJSON(w, it)
 }
 

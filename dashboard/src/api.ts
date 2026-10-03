@@ -38,7 +38,14 @@ export type Review = {
   options: string[]
   first_seen: string
   seen_by?: string
-  suggestion?: { value: string; rationale: string; confidence: string; model: string; at: string }
+  suggestion?: {
+    value: string
+    probabilities?: Record<string, number>
+    confidence: number
+    rationale?: string
+    model: string
+    at: string
+  }
   status: 'pending' | 'applied' | 'dismissed'
   decision?: string
   decided_at?: string

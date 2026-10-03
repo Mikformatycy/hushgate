@@ -13,12 +13,15 @@ import (
 	"unicode"
 )
 
+// Suggestion is advice from the AI advisor. Probabilities and Confidence are
+// the classifier's calibrated outputs (0-1); Rationale is optional text.
 type Suggestion struct {
-	Value      string    `json:"value"`
-	Rationale  string    `json:"rationale"`
-	Confidence string    `json:"confidence"`
-	Model      string    `json:"model"`
-	At         time.Time `json:"at"`
+	Value         string             `json:"value"`
+	Probabilities map[string]float64 `json:"probabilities,omitempty"`
+	Confidence    float64            `json:"confidence"`
+	Rationale     string             `json:"rationale,omitempty"`
+	Model         string             `json:"model"`
+	At            time.Time          `json:"at"`
 }
 
 type Item struct {
