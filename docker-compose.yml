@@ -1,0 +1,42 @@
+services:
+  proxy:
+    build: ./proxy
+    environment:
+      UPSTREAM_URL: https://api.anthropic.com
+      UPSTREAM_API_KEY: ${ANTHROPIC_API_KEY:?set ANTHROPIC_API_KEY}
+      VAULT_ENV_FILES: /vault/.env
+      POLICY_FILE: /etc/gate/policy.json
+      REDIS_ADDR: redis:6379
+      TOKEN_LIMIT: ${TOKEN_LIMIT:-200000}
+    volumes:
+      - ./demo/workspace/.env:/vault/.env:ro
+      - ./proxy/policy.json:/etc/gate/policy.json:ro
+    ports:
+      - "8080:8080"
+    networks: [sandbox, backend, egress]
+    depends_on: [redis]
+
+  redis:
+    image: redis:7-alpine
+    networks: [backend]
+
+  # The agent only sits on the internal sandbox network: no route to the
+  # internet, only to the proxy. It never holds the real API key.
+  agent:
+    build: ./agent
+    environment:
+      ANTHROPIC_BASE_URL: http://proxy:8080
+      ANTHROPIC_API_KEY: placeholder-gate-injects-real-key
+      AGENT_ID: demo-agent
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+    volumes:
+      - ./demo/workspace:/workspace
+    networks: [sandbox]
+    depends_on: [proxy]
+
+networks:
+  sandbox:
+    internal: true
+  backend:
+    internal: true
+  egress: {}
