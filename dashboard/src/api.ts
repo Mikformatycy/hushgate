@@ -2,7 +2,7 @@ export type GateEvent = {
   id: number
   time: string
   agent: string
-  kind: 'mask' | 'tool_call' | 'usage' | 'denied' | 'reset' | 'shadow_ai' | 'node_blocked' | 'suggestion' | 'review'
+  kind: 'mask' | 'tool_call' | 'usage' | 'denied' | 'reset' | 'shadow_ai' | 'node_blocked' | 'suggestion' | 'review' | 'injection'
   host?: string
   tool?: string
   tool_id?: string

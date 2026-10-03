@@ -16,6 +16,7 @@ import (
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/budget"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/policy"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/review"
+	"github.com/Mikformatycy/goldman-sachs/proxy/internal/scan"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/vault"
 )
 
@@ -31,6 +32,7 @@ type Gateway struct {
 	Budget      budget.Store
 	Audit       audit.Logger
 	Reviews     *review.Store // optional: queue tools that have no policy rule
+	Scans       *scan.Store   // optional: queue tool results for injection scanning
 }
 
 var hopHeaders = map[string]bool{
@@ -79,6 +81,7 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.URL.Path == "/v1/messages" {
 		g.discoverTools(agent, body)
+		g.queueToolResults(agent, body)
 	}
 
 	resp, err := g.forward(ctx, r, body)
@@ -168,6 +171,89 @@ func (g *Gateway) discoverTools(agent string, body []byte) {
 				string(g.Policy.SinkFor(t.Name))+" (policy default)", agent)
 		}
 	}
+}
+
+// queueToolResults sends what the agent just received from its tools (the
+// last user message) to the injection scan queue, labelled with the call that
+// produced it. The body is already masked.
+func (g *Gateway) queueToolResults(agent string, body []byte) {
+	if g.Scans == nil {
+		return
+	}
+	var req struct {
+		Messages []struct {
+			Role    string          `json:"role"`
+			Content json.RawMessage `json:"content"`
+		} `json:"messages"`
+	}
+	if json.Unmarshal(body, &req) != nil || len(req.Messages) == 0 {
+		return
+	}
+	type block struct {
+		Type      string          `json:"type"`
+		ID        string          `json:"id"`
+		Name      string          `json:"name"`
+		Input     json.RawMessage `json:"input"`
+		ToolUseID string          `json:"tool_use_id"`
+		Content   json.RawMessage `json:"content"`
+		Text      string          `json:"text"`
+	}
+	calls := map[string]string{}
+	for _, m := range req.Messages {
+		var blocks []block
+		if json.Unmarshal(m.Content, &blocks) != nil {
+			continue
+		}
+		for _, b := range blocks {
+			if b.Type == "tool_use" {
+				src := b.Name + " " + string(b.Input)
+				if len(src) > 120 {
+					src = src[:120] + "…"
+				}
+				calls[b.ID] = src
+			}
+		}
+	}
+	last := req.Messages[len(req.Messages)-1]
+	var blocks []block
+	if last.Role != "user" || json.Unmarshal(last.Content, &blocks) != nil {
+		return
+	}
+	for _, b := range blocks {
+		if b.Type != "tool_result" {
+			continue
+		}
+		text := blockText(b.Content)
+		if len(strings.TrimSpace(text)) < 20 {
+			continue
+		}
+		src, ok := calls[b.ToolUseID]
+		if !ok {
+			src = "tool result"
+		}
+		g.Scans.Observe(agent, src, text)
+	}
+}
+
+// blockText flattens tool_result content: a string or a list of text blocks.
+func blockText(raw json.RawMessage) string {
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return s
+	}
+	var parts []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	json.Unmarshal(raw, &parts)
+	var b strings.Builder
+	for _, p := range parts {
+		if p.Type == "text" {
+			b.WriteString(p.Text)
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
 }
 
 // decideTool applies policy to one complete tool call. It returns the action

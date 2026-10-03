@@ -21,6 +21,7 @@ import (
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/gateway"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/policy"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/review"
+	"github.com/Mikformatycy/goldman-sachs/proxy/internal/scan"
 	"github.com/Mikformatycy/goldman-sachs/proxy/internal/vault"
 )
 
@@ -40,6 +41,11 @@ func main() {
 
 	v := vault.New(maskFrom)
 	reviews := review.NewStore()
+	scans := scan.NewStore(500)
+	injectionAt, err := strconv.ParseFloat(env("INJECTION_ALERT_THRESHOLD", "0.8"), 64)
+	if err != nil {
+		log.Fatalf("INJECTION_ALERT_THRESHOLD: %v", err)
+	}
 	for _, path := range strings.Split(os.Getenv("VAULT_ENV_FILES"), ",") {
 		if path = strings.TrimSpace(path); path == "" {
 			continue
@@ -91,6 +97,7 @@ func main() {
 		Budget:      store,
 		Audit:       logger,
 		Reviews:     reviews,
+		Scans:       scans,
 	}
 
 	nodes, err := forward.LoadNodes(os.Getenv("NODES_FILE"))
@@ -114,7 +121,8 @@ func main() {
 
 	if token := os.Getenv("ADMIN_TOKEN"); token != "" {
 		api := &admin.API{Token: token, AdvisorToken: os.Getenv("ADVISOR_TOKEN"), Events: ring, Budget: store,
-			Audit: logger, Vault: v, Policy: pol, Reviews: reviews, TokenLimit: limit, Nodes: nodes.List()}
+			Audit: logger, Vault: v, Policy: pol, Reviews: reviews, Scans: scans, InjectionAt: injectionAt,
+			TokenLimit: limit, Nodes: nodes.List()}
 		adminAddr := env("ADMIN_ADDR", ":8081")
 		log.Printf("admin api listening on %s", adminAddr)
 		go func() { log.Fatal(http.ListenAndServe(adminAddr, api.Handler())) }()
