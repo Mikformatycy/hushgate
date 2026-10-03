@@ -111,6 +111,19 @@ export default function App() {
               </button>
             </div>
           ))}
+          {config?.policy_file.error && (
+            <div className="mb-3 flex items-start gap-3 rounded-lg bg-bad px-4 py-3 text-white">
+              <span className="text-lg leading-5">⊗</span>
+              <div>
+                <p className="font-bold">
+                  Policy file rejected, previous policy still active (version {config.policy_file.version})
+                </p>
+                <p className="text-sm">
+                  {config.policy_file.path}: {config.policy_file.error}
+                </p>
+              </div>
+            </div>
+          )}
           {error && (
             <div className="mb-3 rounded-lg border-l-4 border-bad bg-white px-4 py-3">
               <b>Cannot reach the gate admin API.</b> <span className="text-gray-600">{error}</span>
@@ -345,7 +358,7 @@ function Vault({ config }: { config: Config | null }) {
 
 const sinkInfo = {
   local: { tone: 'ok', label: 'Local', text: 'Allowed. Vaulted values are restored in its arguments.' },
-  network: { tone: 'warn', label: 'Network', text: 'Allowed without secrets. A vault placeholder in its arguments fires the kill switch.' },
+  network: { tone: 'warn', label: 'Network', text: 'Allowed without vaulted data; with it, the Controls above decide.' },
   deny: { tone: 'bad', label: 'Denied', text: 'Always blocked.' },
 } as const
 
@@ -573,32 +586,107 @@ function ReviewCard({ r, onDecided }: { r: Review; onDecided: () => void }) {
   )
 }
 
+const actionInfo = {
+  allow: { tone: 'ok', label: 'Allow' },
+  block: { tone: 'warn', label: 'Block the call' },
+  kill: { tone: 'bad', label: 'Kill switch' },
+} as const
+
 function Policy({ config }: { config: Config | null }) {
   if (!config) return null
   const tools = Object.entries(config.policy.tools).sort(([a], [b]) => a.localeCompare(b))
   const def = sinkInfo[config.policy.default as keyof typeof sinkInfo]
+  const budgets = Object.entries(config.budgets ?? {}).sort(([a], [b]) => a.localeCompare(b))
+  const pf = config.policy_file
   return (
-    <Panel title={`Tool rules (${tools.length})`}>
-      <p className="px-5 py-3 text-gray-600">
-        Every tool call the model requests is checked before the agent sees it. Tools not listed are treated as{' '}
-        <b>{def?.label ?? config.policy.default}</b>.
-      </p>
-      <Table head={['Tool', 'Type', 'Behavior']}>
-        {tools.map(([name, sink]) => {
-          const info = sinkInfo[sink]
-          return (
-            <tr key={name}>
-              <Td>
-                <Mono>{name}</Mono>
+    <>
+      <Panel title="Policy file">
+        <p className="px-5 py-3 text-gray-600">
+          Every setting on this page comes from <Mono>{pf.path}</Mono> (<Mono>config/hushgate.yaml</Mono> in the
+          repository). Edit and save it: the gate applies the change within a second and lists it in the audit log. An
+          invalid edit is rejected and the previous version stays active.
+        </p>
+        <Table head={['Version', 'Loaded at', 'Status']}>
+          <tr>
+            <Td>
+              <Mono>{pf.version}</Mono>
+            </Td>
+            <Td className="font-mono text-xs text-gray-600">{time(pf.loaded_at)}</Td>
+            <Td>{pf.error ? <Status tone="bad">Last edit rejected</Status> : <Status tone="ok">Active</Status>}</Td>
+          </tr>
+        </Table>
+      </Panel>
+
+      <Panel title="Controls">
+        <Table head={['Setting', 'Value']}>
+          <tr>
+            <Td>Masked before reaching the LLM</Td>
+            <Td>
+              Tier <b>{config.mask_from}</b> and above
+            </Td>
+          </tr>
+          {['C3', 'C2', 'C1'].map((t) => {
+            const a = config.policy.on_network_tool[t] ?? 'allow'
+            return (
+              <tr key={t}>
+                <Td>
+                  <TierBadge tier={t} /> data in a network tool call
+                </Td>
+                <Td>
+                  <Status tone={actionInfo[a].tone}>{actionInfo[a].label}</Status>
+                </Td>
+              </tr>
+            )
+          })}
+          <tr>
+            <Td>Allowed models</Td>
+            <Td>{config.models?.length ? config.models.map((m) => <Mono key={m}>{m}</Mono>) : 'Any model'}</Td>
+          </tr>
+          <tr>
+            <Td>Approved LLM providers (company network)</Td>
+            <Td>{(config.llm_hosts ?? []).map((h) => <Mono key={h}>{h}</Mono>)}</Td>
+          </tr>
+          <tr>
+            <Td>Prompt injection warning above</Td>
+            <Td>{(config.injection_threshold * 100).toFixed(0)}% (AI advisor score)</Td>
+          </tr>
+          <tr>
+            <Td>Token budget per agent</Td>
+            <Td>{config.token_limit ? config.token_limit.toLocaleString() : 'Unlimited'}</Td>
+          </tr>
+          {budgets.map(([agent, n]) => (
+            <tr key={agent}>
+              <Td className="pl-10">
+                Budget for <Mono>{agent}</Mono>
               </Td>
-              <Td>
-                <Status tone={info.tone}>{info.label}</Status>
-              </Td>
-              <Td className="text-gray-700">{info.text}</Td>
+              <Td>{n ? n.toLocaleString() : 'Unlimited'}</Td>
             </tr>
-          )
-        })}
-      </Table>
-    </Panel>
+          ))}
+        </Table>
+      </Panel>
+
+      <Panel title={`Tool rules (${tools.length})`}>
+        <p className="px-5 py-3 text-gray-600">
+          Every tool call the model requests is checked before the agent sees it. Tools not listed are treated as{' '}
+          <b>{def?.label ?? config.policy.default}</b>.
+        </p>
+        <Table head={['Tool', 'Type', 'Behavior']}>
+          {tools.map(([name, sink]) => {
+            const info = sinkInfo[sink]
+            return (
+              <tr key={name}>
+                <Td>
+                  <Mono>{name}</Mono>
+                </Td>
+                <Td>
+                  <Status tone={info.tone}>{info.label}</Status>
+                </Td>
+                <Td className="text-gray-700">{info.text}</Td>
+              </tr>
+            )
+          })}
+        </Table>
+      </Panel>
+    </>
   )
 }

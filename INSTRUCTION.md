@@ -78,18 +78,16 @@ Or with Go 1.26 installed: `cd proxy && go test ./...`
 
 ## Configuration
 
-| What | Where |
-|---|---|
-| Tool rules (`local`, `network`, `deny`, default) | `proxy/policy.json` |
-| Secrets to protect, tier overrides (`KEY=value # @class: C3`) | `demo/workspace/.env` |
-| Allowlisted devices | `demo/corp/nodes.json` |
-| Token budget per agent, approved LLM hosts, injection alert threshold, mask tier | `environment:` of the `gate` / `proxy` service in the compose file (`TOKEN_LIMIT`, `APPROVED_LLM_HOSTS`, `INJECTION_ALERT_THRESHOLD`, `MASK_FROM_TIER`) |
+Every control is in one file: `config/hushgate.yaml` (comments explain each setting). Edit and save it while the gate runs:
 
-After editing, recreate the gate (this also clears the in-memory audit log and review queue):
+- A valid change applies within a second. The dashboard shows "Policy reloaded" with exactly what changed, e.g. `tools.rules.Bash: local → deny`.
+- An invalid change (a typo in a key, an unknown value) is rejected. A red banner names the problem and the previous policy stays active until the file is fixed.
+- Editing the vault file `demo/workspace/.env` also reloads.
+- Applying a decision on the Review page writes it into the file.
 
-```sh
-docker compose -f docker-compose.corp.yml up -d --force-recreate gate   # gateway mode: docker compose up -d --force-recreate proxy
-```
+Things to try: set `Bash: deny`, restrict `models.allow` to `claude-haiku-*`, give an agent a tiny budget under `budgets.agents`, or change `masking.on_network_tool.C3` from `kill` to `block`.
+
+Deployment settings (ports, Redis, upstream URL, certificates, tokens) stay in the compose files.
 
 ## Stopping
 

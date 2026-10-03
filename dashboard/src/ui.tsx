@@ -122,6 +122,10 @@ export function EventStatus({ e }: { e: GateEvent }) {
       return <Status tone="info">AI suggestion</Status>
     case 'injection':
       return <Status tone="warn">Prompt injection</Status>
+    case 'policy':
+      return e.action === 'rejected' ? <Status tone="bad">Policy rejected</Status> : <Status tone="info">Policy reloaded</Status>
+    case 'model_blocked':
+      return <Status tone="bad">Model blocked</Status>
     case 'review':
       return <Status tone="ok">Reviewed</Status>
     default:
@@ -171,6 +175,19 @@ export function eventMessage(e: GateEvent): ReactNode {
       return (
         <>
           In <Mono>{e.tool}</Mono>: {e.reason}
+        </>
+      )
+    case 'policy':
+      return e.action === 'rejected' ? (
+        <>
+          Edit to <Mono>hushgate.yaml</Mono> rejected, previous policy still active: {e.reason}
+        </>
+      ) : (
+        <>
+          <Mono>hushgate.yaml</Mono> applied:{' '}
+          {e.reason?.split('; ').map((c) => (
+            <Mono key={c}>{c}</Mono>
+          ))}
         </>
       )
     case 'shadow_ai':
