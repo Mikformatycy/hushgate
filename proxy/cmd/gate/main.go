@@ -73,11 +73,12 @@ func main() {
 	}
 	log.Printf("policy %s loaded (version %s), watching for changes", policyPath, live.Status().Version)
 	go live.Watch(context.Background(), time.Second)
-	go func() { // fetch URL feeds now and every refresh_seconds; the watcher applies new copies
+	go func() { // fetch URL feeds when new or due; the watcher applies new copies
 		for {
 			cfg := live.Get()
-			eng.Feeds.Fetch(context.Background(), cfg.Signatures.Feeds)
-			time.Sleep(time.Duration(cfg.Signatures.RefreshSeconds) * time.Second)
+			eng.Feeds.FetchDue(context.Background(), cfg.Signatures.Feeds,
+				time.Duration(cfg.Signatures.RefreshSeconds)*time.Second)
+			time.Sleep(2 * time.Second)
 		}
 	}()
 

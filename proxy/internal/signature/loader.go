@@ -17,19 +17,34 @@ import (
 type Loader struct {
 	Client *http.Client
 
-	mu       sync.Mutex
-	raw      map[string][]byte // latest fetched bytes per URL
-	fetchErr map[string]string
-	lastGood map[string]*Feed
+	mu        sync.Mutex
+	raw       map[string][]byte // latest fetched bytes per URL
+	fetchErr  map[string]string
+	lastGood  map[string]*Feed
+	fetchedAt map[string]time.Time
 }
 
 func NewLoader() *Loader {
 	return &Loader{Client: &http.Client{Timeout: 10 * time.Second}, raw: map[string][]byte{},
-		fetchErr: map[string]string{}, lastGood: map[string]*Feed{}}
+		fetchErr: map[string]string{}, lastGood: map[string]*Feed{}, fetchedAt: map[string]time.Time{}}
 }
 
 func isURL(src string) bool {
 	return strings.HasPrefix(src, "https://") || strings.HasPrefix(src, "http://")
+}
+
+// FetchDue downloads URL sources never fetched or last fetched more than
+// every ago, so a feed newly added to the policy is picked up right away.
+func (l *Loader) FetchDue(ctx context.Context, sources []string, every time.Duration) {
+	var due []string
+	l.mu.Lock()
+	for _, src := range sources {
+		if t, ok := l.fetchedAt[src]; isURL(src) && (!ok || time.Since(t) >= every) {
+			due = append(due, src)
+		}
+	}
+	l.mu.Unlock()
+	l.Fetch(ctx, due)
 }
 
 // Fetch downloads every URL source now. Errors are recorded per source.
@@ -45,6 +60,7 @@ func (l *Loader) Fetch(ctx context.Context, sources []string) {
 		} else {
 			l.raw[src], l.fetchErr[src] = b, ""
 		}
+		l.fetchedAt[src] = time.Now()
 		l.mu.Unlock()
 	}
 }
@@ -71,9 +87,11 @@ func (l *Loader) Raw(sources []string) [][]byte {
 	out := make([][]byte, 0, len(sources))
 	for _, src := range sources {
 		if isURL(src) {
+			// Include the fetch error so a failing source is reported, not just a changed one.
 			l.mu.Lock()
-			out = append(out, append([]byte(src), l.raw[src]...))
+			b := append([]byte(src+"\x00"+l.fetchErr[src]+"\x00"), l.raw[src]...)
 			l.mu.Unlock()
+			out = append(out, b)
 			continue
 		}
 		b, _ := os.ReadFile(src)

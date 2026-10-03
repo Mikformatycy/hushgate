@@ -133,8 +133,12 @@ func TestLoaderFallsBackToLastGood(t *testing.T) {
 		t.Fatalf("initial load: %d feeds, %+v", len(feeds), st)
 	}
 
+	before := string(l.Raw(sources)[1])
 	body = "" // feed server goes down
 	l.Fetch(context.Background(), sources)
+	if string(l.Raw(sources)[1]) == before {
+		t.Fatal("a failed fetch must change the fingerprint so the status is updated")
+	}
 	feeds, st = l.Load(sources)
 	if len(feeds) != 2 || !strings.Contains(st[1].Error, "latest fetch failed") {
 		t.Fatalf("outage should keep the last copy: %d feeds, %+v", len(feeds), st)

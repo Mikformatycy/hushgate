@@ -77,16 +77,26 @@ func (l *Live) Watch(ctx context.Context, every time.Duration) {
 	}
 }
 
+// settle is how long a changed file must stay unchanged before it is applied.
+// Saves that write in place briefly leave a truncated file; reading one of
+// those could apply half a policy.
+const settle = 200 * time.Millisecond
+
 // reload applies the file if it changed; caller holds l.mu.
 func (l *Live) reload(initial bool) (changed bool, err error) {
-	data, err := os.ReadFile(l.path)
+	cfg, perr, hash, err := l.read()
 	if err != nil {
 		return false, l.reject(initial, "cannot read policy file: "+err.Error(), "read:"+err.Error())
 	}
-	cfg, perr := Parse(data)
-	hash := l.fingerprint(data, cfg)
 	if hash == l.hash {
 		return false, nil
+	}
+	if !initial {
+		time.Sleep(settle)
+		_, _, again, err := l.read()
+		if err != nil || again != hash {
+			return false, nil // still being written: try again on the next tick
+		}
 	}
 	if perr != nil {
 		return false, l.reject(initial, perr.Error(), hash)
@@ -106,6 +116,16 @@ func (l *Live) reload(initial bool) (changed bool, err error) {
 		l.onEvent("reloaded", joinChanges(changes))
 	}
 	return true, nil
+}
+
+// read loads the file and fingerprints it with everything it points at.
+func (l *Live) read() (cfg *Config, perr error, hash string, err error) {
+	data, err := os.ReadFile(l.path)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	cfg, perr = Parse(data)
+	return cfg, perr, l.fingerprint(data, cfg), nil
 }
 
 // reject records a bad edit once per distinct file content.

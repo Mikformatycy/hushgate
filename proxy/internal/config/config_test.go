@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseDefaults(t *testing.T) {
@@ -188,5 +189,39 @@ func TestShippedPolicyIsValid(t *testing.T) {
 	}
 	if len(c.Signatures.Feeds) == 0 || len(c.BashGuard.Tools) == 0 || len(c.Nodes) == 0 {
 		t.Fatalf("shipped policy lost a section: %+v", c)
+	}
+}
+
+func TestHalfWrittenFileIsNotApplied(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hushgate.yaml")
+	writeFile(t, path, "tools:\n  rules: {Bash: local, Read: local}\n")
+	l := NewLive(path, func(old, new *Config) error { return nil }, func(string, string) {})
+	if err := l.Load(); err != nil {
+		t.Fatal(err)
+	}
+	// A save in progress: the file is truncated (still valid YAML), then completed
+	// while the gate is waiting for it to settle.
+	writeFile(t, path, "tools:\n  rules: {Bash: local}\n")
+	done := make(chan bool)
+	go func() {
+		l.mu.Lock()
+		changed, _ := l.reload(false)
+		l.mu.Unlock()
+		done <- changed
+	}()
+	time.Sleep(settle / 4)
+	writeFile(t, path, "tools:\n  rules: {Bash: local, Read: local, Write: local}\n")
+	if <-done {
+		t.Fatal("applied a file that changed while settling")
+	}
+	if _, ok := l.Get().Tools.Rules["Read"]; !ok {
+		t.Fatal("the truncated policy replaced the active one")
+	}
+	l.mu.Lock()
+	l.reload(false)
+	l.mu.Unlock()
+	if l.Get().Tools.Rules["Write"] != "local" {
+		t.Fatal("completed file not applied")
 	}
 }
