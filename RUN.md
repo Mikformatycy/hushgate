@@ -214,6 +214,8 @@ just claude-sandbox
 # without just: docker compose exec claude-code claude
 ```
 
+For the live demo, use the rehearsed prompts in [DEMO.md](DEMO.md).
+
 Check that it cannot reach the internet except through the gate:
 
 ```sh

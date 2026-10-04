@@ -163,6 +163,11 @@ claude-sandbox-check:
     @{{ gw }} exec -T claude-code curl -s -m 5 http://1.1.1.1 -o /dev/null && echo "raw IP: REACHED" || echo "raw IP: blocked"
     @{{ gw }} exec -T claude-code curl -s -m 5 http://proxy:8080/healthz > /dev/null && echo "HushGate gateway: reachable" || echo "HushGate gateway: NOT reachable"
 
+# Un-halt the sandboxed Claude Code after a kill or a budget test
+[group('gateway')]
+claude-sandbox-reset:
+    curl -s -X POST localhost:3000/api/agents/claude-code-sandbox/reset
+
 # --- Policy (reloads live on save) --------------------------------------------
 
 # Edit the policy file; changes apply within a second
