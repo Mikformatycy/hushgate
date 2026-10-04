@@ -28,6 +28,13 @@ body {
   font-size: 14px;
 }
 
+/* Code shows exactly what was typed: no ligatures turning <!-- or :// into arrows. */
+code,
+pre,
+.font-mono {
+  font-variant-ligatures: none;
+}
+
 @keyframes kill-flash {
   0%, 100% { box-shadow: 0 0 0 0 rgba(213, 68, 59, 0); }
   50% { box-shadow: 0 0 0 6px rgba(213, 68, 59, 0.3); }
