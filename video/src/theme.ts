@@ -5,7 +5,7 @@ export const SANS = loadSans('normal', {weights: ['400', '500', '600', '700', '8
 export const MONO = loadMono('normal', {weights: ['400', '600'], subsets: ['latin']}).fontFamily;
 
 // Primary is the challenge partner's blue, rgb(114, 151, 197). GS_DEEP is the same hue,
-// darkened for text on light backgrounds. Semantic colors stay separate from it.
+// darkened for text on light backgrounds. Semantic colors (green, red, violet) stay separate from it.
 export const C = {
   gs: '#7297C5',
   gsDeep: '#3F6699',
@@ -23,6 +23,7 @@ export const C = {
   okTint: '#E6F4EC',
   bad: '#D5443B',
   badTint: '#FBEAE8',
-  warn: '#C98A1A',
-  warnTint: '#FBF2DF',
+  // Warnings raised by the AI (prompt injection) are violet, so nothing reads as orange or yellow.
+  warn: '#7B5CC4',
+  warnTint: '#F0EBFA',
 };

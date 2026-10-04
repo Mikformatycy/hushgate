@@ -7,7 +7,7 @@ import {gateFlash} from './Flow';
 import {AttackDetail, AuditDetail, Chart, PolicyDetail, ShadowDetail, SpendDetail} from './Details';
 
 const RAIL = ['grid', 'shield', 'gauge', 'laptop', 'file', 'list'] as const;
-const ACTIVE: [number, number][] = [[480, 0], [T.attack[0], 0], [T.attack[0] + 12, 1], [T.spend[0], 1], [T.spend[0] + 12, 2], [T.shadow[0], 2], [T.shadow[0] + 12, 3], [T.policy[0], 3], [T.policy[0] + 12, 4], [T.audit[0], 4], [T.audit[0] + 12, 5]];
+const ACTIVE: [number, number][] = [[T.tileDone - 2, 0], [T.attack[0], 0], [T.attack[0] + 12, 1], [T.spend[0], 1], [T.spend[0] + 12, 2], [T.shadow[0], 2], [T.shadow[0] + 12, 3], [T.policy[0], 3], [T.policy[0] + 12, 4], [T.audit[0], 4], [T.audit[0] + 12, 5]];
 
 const Frame: React.FC<{f: number}> = ({f}) => {
   const o = tw(f, T.frameIn, T.frameIn + 28);
@@ -37,7 +37,7 @@ const Frame: React.FC<{f: number}> = ({f}) => {
 type TileDef = {label: string; icon: 'shield' | 'gauge' | 'laptop' | 'grid'; value: (f: number) => number; changeAt: number; foot: React.ReactNode};
 const count = (f: number, at: number, to: number) => Math.round(tw(f, at, at + 14, 0, to));
 const TILES: TileDef[] = [
-  {label: 'Leaks to the model', icon: 'grid', value: () => 0, changeAt: -1, foot: <Pill tone="ok" size={17}>✓ every secret masked</Pill>},
+  {label: 'Leaks to the model', icon: 'grid', value: () => 0, changeAt: -1, foot: <Pill tone="ok" size={17}>✓ secrets and PII masked</Pill>},
   {label: 'Attacks stopped', icon: 'shield', value: (f) => count(f, T.attack[1] - 4, 3), changeAt: T.attack[1] - 4, foot: '19 live signatures'},
   {label: 'Budget stops', icon: 'gauge', value: (f) => count(f, T.spend[1] - 4, 1), changeAt: T.spend[1] - 4, foot: 'limits per agent'},
   {label: 'Shadow AI blocked', icon: 'laptop', value: (f) => count(f, T.shadow[1] - 4, 1), changeAt: T.shadow[1] - 4, foot: 'unknown devices'},
@@ -59,7 +59,7 @@ const EXPANDS: [number, readonly [number, number]][] = [[1, T.attack], [2, T.spe
 const Tiles: React.FC<{f: number}> = ({f}) => (
   <>
     {[1, 2, 3].map((i) => {
-      const p = sp(f, 466 + i * 6, {damping: 16, stiffness: 150});
+      const p = sp(f, T.tileDone - 16 + i * 6, {damping: 16, stiffness: 150});
       if (p <= 0.001) return null;
       const [, w] = EXPANDS.find(([t]) => t === i)!;
       const hidden = f >= w[0] && f < w[1];
@@ -79,8 +79,8 @@ const Hero: React.FC<{f: number}> = ({f}) => {
   if (f < T.gateOn) return null;
   const r = kr(f, [[T.gateOn, DOT], [T.gateOn + 20, GATE], [T.zeroIn, GATE], [T.zeroDone, ZERO], [T.toTile, ZERO], [T.tileDone, TILE(0)]]);
   const flash = f < T.zeroIn ? gateFlash(f) : 0;
-  const zeroO = kf(f, [[362, 0], [384, 1], [T.toTile, 1], [T.toTile + 12, 0]]);
-  const zp = sp(f, 368, {damping: 9, stiffness: 140});
+  const zeroO = kf(f, [[T.zeroDone - 14, 0], [T.zeroDone + 8, 1], [T.toTile, 1], [T.toTile + 12, 0]]);
+  const zp = sp(f, T.zeroDone - 8, {damping: 9, stiffness: 140});
   const card = tw(f, T.zeroIn, T.zeroDone);
   return (
     <div
@@ -95,12 +95,12 @@ const Hero: React.FC<{f: number}> = ({f}) => {
       <div style={{position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', opacity: win(f, T.gateActive, T.zeroIn + 14, 8, 14)}}><Shield size={64} /></div>
       {card > 0 && (
         <div style={{position: 'absolute', left: 0, top: 0, width: ZERO.w, padding: '44px 54px', opacity: zeroO}}>
-          <div style={{fontSize: 30, color: C.sub, fontWeight: 700}}>Plaintext secrets that reached the model</div>
+          <div style={{fontSize: 30, color: C.sub, fontWeight: 700}}>Sensitive values that reached the model</div>
           <div style={{fontSize: 220, fontWeight: 800, color: C.gsDeep, lineHeight: 1.05, letterSpacing: '-0.04em', transform: `scale(${zp})`, transformOrigin: '0 70%'}}>0</div>
-          <Pill tone="ok" size={26}>✓ every secret masked in flight</Pill>
+          <Pill tone="ok" size={26}>✓ secrets and personal data masked in flight</Pill>
         </div>
       )}
-      <div style={{position: 'absolute', left: 0, top: 0, width: TILE(0).w, height: TILE(0).h, opacity: tw(f, 466, 484)}}><TileBody d={TILES[0]} f={f} /></div>
+      <div style={{position: 'absolute', left: 0, top: 0, width: TILE(0).w, height: TILE(0).h, opacity: tw(f, T.tileDone - 16, T.tileDone + 2)}}><TileBody d={TILES[0]} f={f} /></div>
     </div>
   );
 };
@@ -116,7 +116,7 @@ const Expander: React.FC<{f: number; tile: number; w: readonly [number, number];
 };
 
 const DetailBase: React.FC<{f: number}> = ({f}) => {
-  const o = tw(f, 476, 494);
+  const o = tw(f, T.tileDone - 6, T.tileDone + 12);
   if (o <= 0) return null;
   return (
     <div style={{...box(DETAIL), overflow: 'hidden', background: '#FFFFFF', border: `1.5px solid ${C.border}`, opacity: o}}>
@@ -137,7 +137,7 @@ export const Dash: React.FC<{f: number}> = ({f}) => {
       <DetailBase f={f} />
       <Tiles f={f} />
       <Hero f={f} />
-      <div style={{position: 'absolute', left: 0, right: 0, top: ZERO.y + ZERO.h + 26, textAlign: 'center', fontSize: 20, fontWeight: 600, color: C.sub, opacity: win(f, 388, T.toTile + 6, 10, 8)}}>Across HushGate's test scenarios</div>
+      <div style={{position: 'absolute', left: 0, right: 0, top: ZERO.y + ZERO.h + 26, textAlign: 'center', fontSize: 20, fontWeight: 600, color: C.sub, opacity: win(f, T.zeroDone + 12, T.toTile + 6, 10, 8)}}>Across HushGate's test scenarios</div>
       <Expander f={f} tile={1} w={T.attack}><AttackDetail f={f} /></Expander>
       <Expander f={f} tile={2} w={T.spend}><SpendDetail f={f} /></Expander>
       <Expander f={f} tile={3} w={T.shadow}><ShadowDetail f={f} /></Expander>

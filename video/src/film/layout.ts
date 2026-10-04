@@ -1,25 +1,30 @@
 import type {Rect} from '../kit';
 
-// One continuous timeline (frames at 30 fps). Every act starts from the state the previous one ended in.
+// One continuous timeline (frames at 30 fps). Every act starts from the state the previous one ended in,
+// and holds long enough after its last element appears to be read.
 export const T = {
-  leak: 96,
-  gateOn: 172,
-  gateActive: 186,
-  zeroIn: 330,
-  zeroDone: 376,
-  toTile: 440,
-  tileDone: 482,
-  frameIn: 448,
-  attack: [520, 700] as const,
-  spend: [705, 860] as const,
-  shadow: [865, 990] as const,
-  policy: [995, 1110] as const,
-  audit: [1115, 1230] as const,
-  end: 1230,
-  total: 1400,
+  leak: 90,
+  gateOn: 160,
+  gateActive: 174,
+  pii: 284,
+  piiDetect: 306,
+  piiStream: 340,
+  zeroIn: 426,
+  zeroDone: 472,
+  toTile: 548,
+  tileDone: 590,
+  frameIn: 556,
+  attack: [640, 840] as const,
+  spend: [845, 1035] as const,
+  shadow: [1040, 1190] as const,
+  policy: [1195, 1315] as const,
+  audit: [1320, 1460] as const,
+  end: 1460,
+  total: 1620,
 };
 
 export const ENV: Rect = {x: 190, y: 330, w: 650, h: 420, r: 22};
+export const ENV_WIDE = 770;
 export const MODEL = {x: 1640, y: 520, r: 116};
 export const GATE_X = 1200;
 export const DOT: Rect = {x: GATE_X - 6, y: 524, w: 12, h: 12, r: 6};

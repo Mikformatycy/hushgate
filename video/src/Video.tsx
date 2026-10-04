@@ -12,16 +12,17 @@ export const TOTAL = T.total;
 
 // One continuous shot: the caption rewrites itself while the picture morphs underneath.
 const CUES: Cue[] = [
-  [10, 90, 'Agents read your *secrets*.', C.bad],
-  [94, 168, 'Then send them to the *model*.', C.bad],
-  [176, 326, '*HushGate* masks them in flight.', C.gs],
-  [350, 446, '*Zero* leaks.', C.ok],
-  [454, 516, 'One view for *every agent*.', C.gsDeep],
-  [524, 698, 'Hijacked agents, *stopped*.', C.bad],
-  [709, 858, 'Spend, *capped*.', C.gsDeep],
-  [869, 988, 'Shadow AI, *blocked*.', C.bad],
-  [999, 1108, 'Nine controls. *One policy file.*', C.gsDeep],
-  [1119, 1228, 'Every action, *on record*.', C.gsDeep],
+  [10, 86, 'Agents read your *secrets*.', C.bad],
+  [90, 158, 'Then send them to the *model*.', C.bad],
+  [164, 278, '*HushGate* masks them in flight.', C.gs],
+  [284, 420, 'Personal data too: *IBAN, PESEL, cards*.', C.gs],
+  [446, 546, '*Zero* leaks.', C.ok],
+  [560, 636, 'One view for *every agent*.', C.gsDeep],
+  [644, 838, 'Hijacked agents, *stopped*.', C.bad],
+  [849, 1033, 'Spend, *capped*.', C.gsDeep],
+  [1044, 1188, 'Shadow AI, *blocked*.', C.bad],
+  [1199, 1313, 'Nine controls. *One policy file.*', C.gsDeep],
+  [1324, 1458, 'Every action, *on record*.', C.gsDeep],
 ];
 
 export const Video = () => {

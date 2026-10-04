@@ -277,7 +277,7 @@ just logs corp
 
 ## Make the launch video
 
-Render the launch video (about 45 seconds) to `video/out/hushgate.mp4` (needs Node):
+Render the launch video (about 55 seconds) to `video/out/hushgate.mp4` (needs Node):
 
 ```sh
 just video
