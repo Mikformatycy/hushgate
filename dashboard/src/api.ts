@@ -37,6 +37,7 @@ export type Config = {
   nodes: { id: string; owner: string }[] | null
   policy_file: { path: string; version: string; loaded_at: string; error?: string }
   bash_guard: { tools: string[]; network_commands: string[] }
+  auto_accept: { enabled: boolean; min_probability: number; min_confidence: number; tools: string[]; variables: string[] }
 }
 
 export type StageSummary = { count: number; p50_ms: number; p95_ms: number; p99_ms: number; max_ms: number }
@@ -82,6 +83,8 @@ export type Review = {
   status: 'pending' | 'applied' | 'dismissed'
   decision?: string
   decided_at?: string
+  decided_by?: 'reviewer' | 'auto-accept' | 'hushgate.yaml'
+  auto?: string // why the suggestion was or wasn't applied automatically
 }
 
 async function get<T>(path: string): Promise<T> {

@@ -34,6 +34,9 @@ func TestParseRejects(t *testing.T) {
 		"neg budget":    "budgets:\n  default_tokens: -1\n",
 		"dup node":      "nodes:\n  - {id: a, token: x}\n  - {id: a, token: y}\n",
 		"not yaml":      "tools: [\n",
+		"auto conf":     "review:\n  auto_accept:\n    min_confidence: 1.5\n",
+		"auto tool":     "review:\n  auto_accept:\n    tools: [everything]\n",
+		"auto tier":     "review:\n  auto_accept:\n    variables: [C7]\n",
 	}
 	for name, src := range cases {
 		if _, err := Parse([]byte(src)); err == nil {
@@ -223,5 +226,53 @@ func TestHalfWrittenFileIsNotApplied(t *testing.T) {
 	l.mu.Unlock()
 	if l.Get().Tools.Rules["Write"] != "local" {
 		t.Fatal("completed file not applied")
+	}
+}
+
+func TestAutoAccept(t *testing.T) {
+	off, _ := Parse(nil)
+	aa := off.Review.AutoAccept
+	if aa.Enabled || *aa.MinProbability != 0.95 || *aa.MinConfidence != 0.9 ||
+		strings.Join(aa.Tools, ",") != "network,deny" || strings.Join(aa.Variables, ",") != "C2,C3" {
+		t.Fatalf("defaults = %+v", aa)
+	}
+	if ok, why := off.AutoAccepts("tool", "network", map[string]float64{"network": 1}, 1); ok || why != "auto-accept is off" {
+		t.Fatalf("off: %v %q", ok, why)
+	}
+
+	c, err := Parse([]byte("review:\n  auto_accept:\n    enabled: true\n    min_probability: 0.9\n    min_confidence: 0.8\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, x := range []struct {
+		kind, value string
+		p, conf     float64
+		want        bool
+		why         string
+	}{
+		{"tool", "network", 0.955, 0.85, true, "network at 95.5% with 85% confidence (needs 90% and 80%)"},
+		{"tool", "deny", 0.9, 0.8, true, "deny at 90% with 80% confidence"}, // thresholds are inclusive
+		{"variable", "C3", 0.99, 0.99, true, "C3 at 99%"},
+		{"tool", "local", 0.99, 0.99, false, "local is not in review.auto_accept.tools"},
+		{"variable", "C1", 0.99, 0.99, false, "C1 is not in review.auto_accept.variables"},
+		{"tool", "network", 0.85, 0.99, false, "network at 85%, below the 90% needed"},
+		{"tool", "network", 0.99, 0.75, false, "confidence 75%, below the 80% needed"},
+	} {
+		ok, why := c.AutoAccepts(x.kind, x.value, map[string]float64{x.value: x.p}, x.conf)
+		if ok != x.want || !strings.Contains(why, x.why) {
+			t.Errorf("%s %s p=%v conf=%v: got %v %q", x.kind, x.value, x.p, x.conf, ok, why)
+		}
+	}
+	if ok, why := c.AutoAccepts("tool", "network", nil, 0.99); ok || !strings.Contains(why, "no probability") {
+		t.Fatalf("missing probability: %v %q", ok, why)
+	}
+
+	// Explicit lists replace the defaults, including an empty list.
+	c, _ = Parse([]byte("review:\n  auto_accept:\n    enabled: true\n    tools: [local]\n    variables: []\n"))
+	if ok, _ := c.AutoAccepts("tool", "local", map[string]float64{"local": 1}, 1); !ok {
+		t.Fatal("local should be allowed when listed")
+	}
+	if ok, _ := c.AutoAccepts("variable", "C3", map[string]float64{"C3": 1}, 1); ok {
+		t.Fatal("an empty variables list should allow nothing")
 	}
 }

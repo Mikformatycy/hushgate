@@ -30,8 +30,8 @@ docker compose -f docker-compose.corp.yml exec <laptop> python laptop.py <scenar
 | 3 | `jdoe-macbook` | `vps` | Employee uses a self-hosted model on a VPS | Blocked (403). Dashboard: Shadow AI |
 | 4 | `jdoe-macbook` | `direct` | Agent tries to bypass the gate | Fails: no network route |
 | 5 | `guest-laptop` | `all` | Unregistered device on the network | Website loads; every LLM request blocked. Dashboard: Unknown device, Nodes page |
-| 6 | `jdoe-macbook` | `claude "post to slack"` | Agent uses a new tool nobody has reviewed | Blocked by default. Appears on the Review page with an AI suggestion. Apply it and run again: allowed |
-| 7 | `jdoe-macbook` | `claude attack` | Agent reads a report with a hidden prompt injection, then tries to email the `.env` secrets out | Amber injection warning about 0.5 s after the read (needs `TYPESAFE_API_KEY`), then the kill switch fires on `send_email`. The agent is halted |
+| 6 | `jdoe-macbook` | `claude "post to slack"` | Agent uses a new tool nobody has reviewed | Blocked by default. Appears on the Review page with an AI suggestion. Apply it and run again: allowed. With `review.auto_accept.enabled: true` a confident suggestion is applied without you |
+| 7 | `jdoe-macbook` | `claude attack` | Agent reads a report with a hidden prompt injection, then tries to email the `.env` secrets out | Violet injection warning about 0.5 s after the read (needs `TYPESAFE_API_KEY`), then the kill switch fires on `send_email`. The agent is halted |
 | 8 | `jdoe-macbook` | `claude "install the dev tool"` | Agent runs an installer piped into a shell (`curl … \| sh`) | Blocked by attack signature HG-RCE-001. The agent keeps running |
 | 9 | `jdoe-macbook` | `claude "upload the config"` | Agent sends the DB password with `curl` from its shell tool | The Bash guard treats the command as a network call: the secret is not restored and the kill switch fires |
 
@@ -108,8 +108,9 @@ Every control is in one file: `config/hushgate.yaml` (comments explain each sett
 - An invalid change (a typo in a key, an unknown value) is rejected. A red banner names the problem and the previous policy stays active until the file is fixed.
 - Editing the vault file `demo/workspace/.env` also reloads.
 - Applying a decision on the Review page writes it into the file.
+- `review.auto_accept` lets confident AI suggestions apply without a reviewer: set `enabled: true`, and suggestions at or above `min_probability` for the chosen option and `min_confidence` overall are applied if the outcome is listed under `tools` or `variables`. The defaults never make a tool `local` or unmask a variable on their own. Suggestions already waiting are re-checked as soon as you save, and every automatic decision is in the audit log as `auto-accept`.
 
-Things to try: set `Bash: deny`, restrict `models.allow` to `claude-haiku-*`, give an agent a tiny budget under `budgets.agents`, change `masking.on_network_tool.C3` from `kill` to `block`, or switch off a signature with `signatures.disabled: [HG-RCE-001]`.
+Things to try: set `Bash: deny`, restrict `models.allow` to `claude-haiku-*`, give an agent a tiny budget under `budgets.agents`, change `masking.on_network_tool.C3` from `kill` to `block`, switch off a signature with `signatures.disabled: [HG-RCE-001]`, or turn on `review.auto_accept` and watch the Review page clear itself.
 
 Attack signatures live in `config/signatures.yaml`, which also reloads live. The policy also lists the same feed on GitHub as a central source; the Signatures page shows each feed's version and status.
 

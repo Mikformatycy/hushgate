@@ -49,7 +49,7 @@ flowchart LR
 
 Enforcement is deterministic: the same input always gets the same decision, and every decision names the rule behind it. AI is used where rules can't decide, and never with the power to change anything on its own:
 
-- **Review queue.** Tools missing from the policy and variables no rule recognized stay at the safe default (denied or masked). The AI advisor asks [TypeSafe Jev](https://docs.typesafe.ai), a classifier with calibrated probabilities, for a suggestion; a person applies or overrides it on the Review page.
+- **Review queue.** Tools missing from the policy and variables no rule recognized stay at the safe default (denied or masked). The AI advisor asks [TypeSafe Jev](https://docs.typesafe.ai), a classifier with calibrated probabilities, for a suggestion; a person applies or overrides it on the Review page. Optionally, `review.auto_accept` lets a suggestion apply on its own when its probability and the classifier's confidence clear set thresholds and the outcome is on an allowed list. By default it can only keep things at least as strict as the unreviewed default: no tool becomes `local` and no variable gets unmasked without a person.
 - **Prompt injection early warning.** What agents read (tool results, already masked) is scored by Jev. A high score raises a dashboard alert, usually before the injected action is attempted. It never blocks.
 
 The advisor sees tool definitions and the *shape* of a variable's value (`payments-oncall` becomes `a8-a6`), never secret values. Its token can post suggestions and alerts but cannot apply them.
@@ -70,7 +70,7 @@ All controls are configured in `config/hushgate.yaml`:
 | Known attack signatures: remote code execution, unsafe deserialization, model supply chain, credential theft, exfiltration | Deterministic: feed of patterns from files or URLs, refreshed on a schedule | `signatures` ([`config/signatures.yaml`](config/signatures.yaml)) |
 | Bash guard: a shell command that reaches the network is treated as a network tool | Deterministic: command parsing that sees through quoting, `sudo`, `xargs`, `bash -c` | `bash_guard` |
 | Egress lockdown | Network (Docker internal networks) | `docker-compose*.yml` |
-| Review suggestions | AI (Jev), advisory | `TYPESAFE_API_KEY` |
+| Review suggestions | AI (Jev), advisory; optional auto-accept above set thresholds | `review.auto_accept` (needs `TYPESAFE_API_KEY`) |
 | Prompt injection warning | AI (Jev), alert only | `injection.alert_threshold` (needs `TYPESAFE_API_KEY`) |
 
 Everything in the right-hand column lives in one file, [`config/hushgate.yaml`](config/hushgate.yaml). The gate reloads it within a second of saving and logs exactly what changed; an invalid edit is rejected and the previous policy stays active. Decisions made on the Review page are written back into the file.
@@ -92,7 +92,7 @@ Deep inspection (masking, tool policy, budgets) covers the Anthropic Messages AP
 
 ## Testing
 
-57 automated tests cover allowed and blocked cases for every control, including false positives:
+62 automated tests cover allowed and blocked cases for every control, including false positives:
 
 ```sh
 docker run --rm -v "$PWD":/src -w /src/proxy golang:1.26-alpine go test ./...

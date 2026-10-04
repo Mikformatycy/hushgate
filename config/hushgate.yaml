@@ -82,6 +82,21 @@ bash_guard:
 injection:
   alert_threshold: 0.8 # AI advisor score (0-1) above which a prompt injection warning is raised
 
+# Cases the rules can't settle (a new tool, an unrecognised variable) wait on the
+# Review page. auto_accept lets the AI advisor's suggestion take effect without a
+# person when the classifier is sure enough. Turning it on also applies
+# suggestions that are already waiting.
+review:
+  auto_accept:
+    enabled: false
+    min_probability: 0.95 # probability the advisor gives the suggested option
+    min_confidence: 0.9 # the advisor's calibrated confidence
+    # Outcomes it may apply on its own. Making a tool "local" (real secrets
+    # restored into it) or unmasking a variable (C0, C1) waits for a person
+    # unless you add it here.
+    tools: [network, deny]
+    variables: [C2, C3]
+
 # Devices allowed to use AI in company network mode. In production the
 # identity comes from a device certificate; here, from proxy credentials.
 nodes:

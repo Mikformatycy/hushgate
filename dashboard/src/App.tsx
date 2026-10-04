@@ -515,7 +515,8 @@ function ReviewPage({ reviews, onDecided }: { reviews: Review[]; onDecided: () =
         <b>AI suggests, a person decides, the rules enforce.</b> These are cases the deterministic rules could not settle:
         tools with no policy entry and variables no rule recognized. Until someone decides, the safe default applies. The
         AI advisor (TypeSafe Jev, a classifier with calibrated probabilities) never sees secret values, only tool
-        definitions and a value's shape, and its credentials can post suggestions but cannot apply them.
+        definitions and a value's shape, and its credentials can post suggestions but cannot apply them. A suggestion
+        takes effect on its own only when <Mono>review.auto_accept</Mono> in the policy file allows it.
       </div>
       <Panel title={`Pending review (${pending.length})`}>
         {pending.length === 0 && <p className="px-5 py-8 text-center text-gray-500">Nothing waiting for review.</p>}
@@ -524,7 +525,7 @@ function ReviewPage({ reviews, onDecided }: { reviews: Review[]; onDecided: () =
         ))}
       </Panel>
       <Panel title={`Decided (${resolved.length})`}>
-        <Table head={['Item', 'Decision', 'AI suggested', 'Decided at']} empty="No decisions yet.">
+        <Table head={['Item', 'Decision', 'AI suggested', 'Decided by', 'Decided at']} empty="No decisions yet.">
           {resolved.map((r) => (
             <tr key={r.id}>
               <Td>
@@ -541,6 +542,17 @@ function ReviewPage({ reviews, onDecided }: { reviews: Review[]; onDecided: () =
                   )
                 ) : (
                   <span className="text-gray-500">—</span>
+                )}
+              </Td>
+              <Td>
+                {r.decided_by === 'auto-accept' ? (
+                  <span className="rounded-full bg-warn-tint px-2.5 py-0.5 text-xs font-bold text-warn" title={r.auto}>
+                    ✦ Auto-accepted
+                  </span>
+                ) : r.decided_by === 'hushgate.yaml' ? (
+                  <span className="text-sub">Policy file edit</span>
+                ) : (
+                  'Reviewer'
                 )}
               </Td>
               <Td className="font-mono text-xs text-gray-600">{r.decided_at ? time(r.decided_at) : ''}</Td>
@@ -638,6 +650,11 @@ function ReviewCard({ r, onDecided }: { r: Review; onDecided: () => void }) {
             <p className="mt-2 text-xs text-gray-500">
               TypeSafe {r.suggestion.model} · {(r.suggestion.confidence * 100).toFixed(0)}% confidence (calibrated)
             </p>
+            {r.auto && (
+              <p className="mt-2 border-t border-warn/20 pt-2 text-xs text-sub">
+                <b className="text-warn">Auto-accept:</b> {r.auto.replace(/^waits for a reviewer: /, 'waits for you, ')}
+              </p>
+            )}
           </>
         ) : (
           <p className="text-gray-500">Waiting for the advisor. You can decide without it.</p>
@@ -835,6 +852,22 @@ function Policy({ config }: { config: Config | null }) {
           <tr>
             <Td>Approved LLM providers (company network)</Td>
             <Td>{(config.llm_hosts ?? []).map((h) => <Mono key={h}>{h}</Mono>)}</Td>
+          </tr>
+          <tr>
+            <Td>AI suggestions applied without a reviewer</Td>
+            <Td>
+              {config.auto_accept?.enabled ? (
+                <>
+                  <Status tone="warn">On</Status> at {(config.auto_accept.min_probability * 100).toFixed(0)}% probability and{' '}
+                  {(config.auto_accept.min_confidence * 100).toFixed(0)}% confidence · tools:{' '}
+                  {config.auto_accept.tools.length ? config.auto_accept.tools.map((v) => <Mono key={v}>{v}</Mono>) : 'none'} ·
+                  variables:{' '}
+                  {config.auto_accept.variables.length ? config.auto_accept.variables.map((v) => <Mono key={v}>{v}</Mono>) : 'none'}
+                </>
+              ) : (
+                <span className="text-sub">Off: every decision waits for a reviewer</span>
+              )}
+            </Td>
           </tr>
           <tr>
             <Td>Prompt injection warning above</Td>

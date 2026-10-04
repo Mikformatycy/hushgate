@@ -1,7 +1,8 @@
 // Package admin serves the dashboard API on its own listener. The agent can
 // reach the proxy container, so every request needs a token. There are two
 // roles: admin (the dashboard, full access) and advisor (the AI service,
-// which may only read the review queue and attach suggestions).
+// which may only read the review queue and attach suggestions). A suggestion
+// takes effect on its own only when the policy file's review.auto_accept allows it.
 package admin
 
 import (
@@ -13,6 +14,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Mikformatycy/hushgate/proxy/internal/audit"
@@ -41,6 +43,8 @@ type API struct {
 	Metrics      *metrics.Metrics
 	MetricsToken string // optional: lets Prometheus scrape /metrics without the admin token
 	AuditFile    string // optional: the JSON Lines audit trail; exports read it in full
+
+	decideMu sync.Mutex // one review decision at a time, by a person or by auto-accept
 }
 
 type agentView struct {
@@ -217,7 +221,63 @@ func (a *API) suggest(w http.ResponseWriter, r *http.Request) {
 	}
 	a.Audit.Record(audit.Event{Agent: "ai-advisor", Kind: "suggestion", Tool: it.Subject, Action: sg.Value,
 		Reason: reason})
+	a.autoAccept(it.ID)
+	it, _ = a.Reviews.Get(it.ID)
 	writeJSON(w, it)
+}
+
+// autoAccept applies a pending suggestion without a person when the policy
+// file's review.auto_accept allows it, and notes on the review why it did or
+// did not. It changes nothing a person's decision could not.
+func (a *API) autoAccept(id string) {
+	a.decideMu.Lock()
+	defer a.decideMu.Unlock()
+	it, ok := a.Reviews.Get(id)
+	if !ok || it.Status != "pending" || it.Suggestion == nil {
+		return
+	}
+	sg := it.Suggestion
+	accept, why := a.Live.Get().AutoAccepts(it.Kind, sg.Value, sg.Probabilities, sg.Confidence)
+	if !accept {
+		a.Reviews.SetAuto(id, "waits for a reviewer: "+why)
+		return
+	}
+	if err := a.write(it, sg.Value, "auto-accept"); err != nil {
+		a.Reviews.SetAuto(id, "auto-accept failed, waits for a reviewer: "+err.Error())
+		return
+	}
+	a.Reviews.SetAuto(id, "applied automatically: "+why)
+	a.Audit.Record(audit.Event{Agent: "auto-accept", Kind: "review", Tool: it.Subject, Action: sg.Value,
+		Reason: "AI suggestion applied without a reviewer, " + why + " (" + sg.Model + "); written to hushgate.yaml"})
+}
+
+// RecheckReviews runs auto-accept over the queue again. Call it after the
+// policy file reloads, so turning auto-accept on or lowering a threshold
+// takes effect on suggestions that are already waiting.
+func (a *API) RecheckReviews() {
+	for _, it := range a.Reviews.List() {
+		if it.Status == "pending" && it.Suggestion != nil {
+			a.autoAccept(it.ID)
+		}
+	}
+}
+
+// write turns a review decision into a rule in the policy file, so it
+// survives restarts and the file stays the single source of truth. The reload
+// that follows applies it and settles the review. Caller holds decideMu.
+func (a *API) write(it review.Item, value, by string) error {
+	var err error
+	if it.Kind == "tool" {
+		err = a.Live.SetToolRule(it.Subject, value)
+	} else {
+		err = a.Live.SetVariableOverride(it.Subject, value)
+	}
+	if err != nil {
+		return err
+	}
+	a.Reviews.Settle(it.ID, value)
+	a.Reviews.SetDecidedBy(it.ID, by)
+	return nil
 }
 
 func (a *API) scans(w http.ResponseWriter, r *http.Request) {
@@ -252,7 +312,8 @@ func (a *API) scanResult(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// decide applies (or dismisses) a review. Humans only.
+// decide applies (or dismisses) a review. Admin credentials only: the
+// advisor's way to a decision is review.auto_accept in the policy file.
 func (a *API) decide(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Action string `json:"action"` // apply | dismiss
@@ -269,7 +330,9 @@ func (a *API) decide(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Action == "dismiss" {
+		a.decideMu.Lock()
 		it, err := a.Reviews.Resolve(id, "dismissed", "")
+		a.decideMu.Unlock()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
@@ -293,24 +356,16 @@ func (a *API) decide(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid value "+req.Value, http.StatusBadRequest)
 		return
 	}
-	if current.Status != "pending" {
+	a.decideMu.Lock()
+	defer a.decideMu.Unlock()
+	if current, _ = a.Reviews.Get(id); current.Status != "pending" {
 		http.Error(w, "review "+id+" is already "+current.Status, http.StatusConflict)
 		return
 	}
-	// The decision becomes a rule in the policy file, so it survives restarts
-	// and the file stays the single source of truth. The reload that follows
-	// applies it and settles this review.
-	var err error
-	if current.Kind == "tool" {
-		err = a.Live.SetToolRule(current.Subject, req.Value)
-	} else {
-		err = a.Live.SetVariableOverride(current.Subject, req.Value)
-	}
-	if err != nil {
+	if err := a.write(current, req.Value, "reviewer"); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	a.Reviews.Settle(id, req.Value)
 	it, _ := a.Reviews.Get(id)
 	a.Audit.Record(audit.Event{Agent: "reviewer", Kind: "review", Tool: it.Subject, Action: req.Value,
 		Reason: note + "; written to hushgate.yaml"})
@@ -377,6 +432,9 @@ func (a *API) config(w http.ResponseWriter, r *http.Request) {
 		"injection_threshold": *cfg.Injection.AlertThreshold,
 		"nodes":               nodes, "detectors": detectors, "policy_file": a.Live.Status(),
 		"bash_guard": map[string]any{"tools": cfg.BashGuard.Tools, "network_commands": cfg.BashGuard.NetworkCommands},
+		"auto_accept": map[string]any{"enabled": cfg.Review.AutoAccept.Enabled,
+			"min_probability": *cfg.Review.AutoAccept.MinProbability, "min_confidence": *cfg.Review.AutoAccept.MinConfidence,
+			"tools": cfg.Review.AutoAccept.Tools, "variables": cfg.Review.AutoAccept.Variables},
 	})
 }
 
