@@ -112,21 +112,29 @@ func main() {
 	}
 	scans := scan.NewStore(500)
 
+	// Chat Completions (OpenAI-compatible): OpenAI by default; https://openrouter.ai/api
+	// for OpenRouter, or any compatible server.
+	chatUpstream, err := url.Parse(env("OPENAI_UPSTREAM_URL", "https://api.openai.com"))
+	if err != nil {
+		log.Fatalf("OPENAI_UPSTREAM_URL: %v", err)
+	}
 	gw := &gateway.Gateway{
-		Upstream:    upstream,
-		UpstreamKey: os.Getenv("UPSTREAM_API_KEY"),
-		Limits:      func(agent string) int64 { return live.Get().LimitFor(agent) },
-		ModelOK:     func(model string) bool { return live.Get().ModelAllowed(model) },
-		Client:      &http.Client{Transport: transport},
-		Vault:       eng.Vault,
-		Policy:      eng.Policy,
-		Budget:      store,
-		Audit:       logger,
-		Reviews:     eng.Reviews,
-		Scans:       scans,
-		Guard:       eng.Guard,
-		Signatures:  eng.Signatures,
-		Metrics:     mx,
+		Upstream:        upstream,
+		UpstreamKey:     os.Getenv("UPSTREAM_API_KEY"),
+		ChatUpstream:    chatUpstream,
+		ChatUpstreamKey: os.Getenv("OPENAI_UPSTREAM_API_KEY"),
+		Limits:          func(agent string) int64 { return live.Get().LimitFor(agent) },
+		ModelOK:         func(model string) bool { return live.Get().ModelAllowed(model) },
+		Client:          &http.Client{Transport: transport},
+		Vault:           eng.Vault,
+		Policy:          eng.Policy,
+		Budget:          store,
+		Audit:           logger,
+		Reviews:         eng.Reviews,
+		Scans:           scans,
+		Guard:           eng.Guard,
+		Signatures:      eng.Signatures,
+		Metrics:         mx,
 	}
 
 	if caCert := os.Getenv("CA_CERT_FILE"); caCert != "" {
