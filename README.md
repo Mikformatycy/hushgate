@@ -1,5 +1,7 @@
 # HushGate
 
+![HushGate: agents use your secrets, the model never sees them](assets/cover.png)
+
 **An AI control layer for agents.** HushGate sits between every AI agent and every model provider. It keeps secrets and personal data away from the model, stops agents from taking actions they shouldn't, catches unapproved AI use and caps spend. Every decision is recorded with the rule that made it.
 
 ![HushGate architecture](2-architecture/architecture.png)
@@ -44,6 +46,7 @@ Without [`just`](https://github.com/casey/just): `docker compose -f docker-compo
 3-reporting/       screenshots, metrics, audit trail
 4-testing/         test catalogue, end-to-end checker (e2e.py), live demo script
 5-implementation/  all code: gate (Go), dashboard (React), AI advisor (Python), policy, demos
+assets/            cover image and logo (SVG, PNG; HTML sources in assets/src)
 docker-compose.yml        gateway mode (developer machines, CI, sandboxed Claude Code)
 docker-compose.corp.yml   company network simulation
 Justfile                  every task as one command

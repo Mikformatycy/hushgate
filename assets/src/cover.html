@@ -1,0 +1,65 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#0C1A2B;--navy2:#13243A;--line:#29405C;--gs:#7297C5;--deep:#3F6699;--text:#F3F5F8;--sub:#B9C6D6;--mute:#8E9BAD;--bad:#E8706A}
+*{box-sizing:border-box}
+body{margin:0;font-family:Manrope,Helvetica,Arial,sans-serif;color:var(--text)}
+#c{position:relative;width:1920px;height:1080px;overflow:hidden;background:
+  radial-gradient(900px 700px at 1480px 520px, rgba(114,151,197,.20), transparent 70%),
+  radial-gradient(rgba(147,166,190,.10) 1.2px, transparent 1.4px) 0 0/28px 28px,
+  var(--navy)}
+.abs{position:absolute}
+.lock{left:128px;top:212px;display:flex;align-items:center;gap:40px}
+.lock svg{width:170px;height:191px;filter:drop-shadow(0 18px 40px rgba(114,151,197,.35))}
+.word{font-size:150px;font-weight:800;letter-spacing:-5px;line-height:1}
+.word span{color:var(--gs)}
+.kicker{left:132px;top:150px;font-size:24px;font-weight:700;letter-spacing:5px;text-transform:uppercase;color:var(--gs)}
+.tag{left:128px;top:500px;font-size:62px;font-weight:800;line-height:1.12;letter-spacing:-1.5px;width:900px}
+.tag span{color:var(--gs)}
+.pills{left:128px;top:705px;display:flex;flex-wrap:wrap;gap:16px;width:880px}
+.pill{font-size:24px;font-weight:700;color:var(--sub);border:2px solid var(--line);background:rgba(19,36,58,.7);border-radius:999px;padding:10px 22px}
+.foot{left:128px;bottom:88px;font-size:24px;color:var(--mute);font-weight:600}
+.card{left:1090px;width:700px;background:var(--navy2);border:2px solid var(--line);border-radius:24px;padding:26px 32px 30px;box-shadow:0 30px 80px rgba(0,0,0,.35)}
+.card .h{display:flex;justify-content:space-between;font-size:20px;font-weight:700;color:var(--mute);letter-spacing:2px;text-transform:uppercase;margin-bottom:18px}
+.row{display:flex;align-items:center;gap:14px;height:62px;font-family:'JetBrains Mono',monospace;font-size:24px;color:var(--sub)}
+.chip{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:21px;border-radius:999px;padding:7px 14px;white-space:nowrap}
+.raw{color:#fff;background:rgba(213,68,59,.85);border:2px solid #D5443B}
+.ph{color:#DCE7F5;background:rgba(114,151,197,.22);border:2px solid var(--gs)}
+.gate{left:1376px;top:438px;width:128px;height:144px}
+.line{width:3px;left:1439px;background:linear-gradient(var(--line),var(--gs))}
+.badge{font-size:20px;font-weight:700;color:var(--gs);letter-spacing:2px;text-transform:uppercase}
+</style></head><body><div id="c">
+<div class="abs kicker">AI control layer for coding agents</div>
+<div class="abs lock">
+  <svg viewBox="0 0 64 72"><defs><linearGradient id="g" x1="0" y1="0" x2="0.35" y2="1"><stop offset="0" stop-color="#9BB9E0"/><stop offset="1" stop-color="#5C84B8"/></linearGradient></defs>
+  <path d="M32 3 L58 12 V34 C58 52 46.5 64 32 69.5 C17.5 64 6 52 6 34 V12 Z" fill="url(#g)"/>
+  <rect x="15" y="29" width="34" height="13" rx="6.5" fill="#fff"/><circle cx="24" cy="35.5" r="2.6" fill="#0C1A2B"/><circle cx="32" cy="35.5" r="2.6" fill="#0C1A2B"/><circle cx="40" cy="35.5" r="2.6" fill="#0C1A2B"/></svg>
+  <div class="word">Hush<span>Gate</span></div>
+</div>
+<div class="abs tag">Agents use your secrets.<br><span>The model never sees them.</span></div>
+<div class="abs pills">
+  <div class="pill">Secrets &amp; client data masked</div>
+  <div class="pill">Tool calls policed</div>
+  <div class="pill">Spend capped</div>
+  <div class="pill">Every action on record</div>
+</div>
+<div class="abs foot">HackYeah 2026 · Team Mikformatyka · github.com/Mikformatycy/hushgate</div>
+
+<div class="abs card" style="top:150px">
+  <div class="h"><span>What the agent sends</span><span style="color:#E8706A">plain text</span></div>
+  <div class="row">DB_PASSWORD= <span class="chip raw">Pr0d-Adm1n-2026</span></div>
+  <div class="row">IBAN&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="chip raw">PL61 1090 1014 0000 0712 1981 2874</span></div>
+  <div class="row">PESEL&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="chip raw">44051401359</span></div>
+</div>
+<div class="abs line" style="top:418px;height:24px"></div>
+<svg class="abs gate" viewBox="0 0 64 72" style="filter:drop-shadow(0 0 28px rgba(114,151,197,.55))"><defs><linearGradient id="g2" x1="0" y1="0" x2="0.35" y2="1"><stop offset="0" stop-color="#9BB9E0"/><stop offset="1" stop-color="#5C84B8"/></linearGradient></defs>
+  <path d="M32 3 L58 12 V34 C58 52 46.5 64 32 69.5 C17.5 64 6 52 6 34 V12 Z" fill="url(#g2)"/>
+  <rect x="15" y="29" width="34" height="13" rx="6.5" fill="#fff"/><circle cx="24" cy="35.5" r="2.6" fill="#0C1A2B"/><circle cx="32" cy="35.5" r="2.6" fill="#0C1A2B"/><circle cx="40" cy="35.5" r="2.6" fill="#0C1A2B"/></svg>
+<div class="abs line" style="top:586px;height:24px"></div>
+<div class="abs card" style="top:614px">
+  <div class="h"><span>What the model sees</span><span style="color:#7297C5">placeholders</span></div>
+  <div class="row">DB_PASSWORD= <span class="chip ph">{{VAULT_ENV_DB_PASSWORD}}</span></div>
+  <div class="row">IBAN&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="chip ph">{{VAULT_IBAN_7F3A91C2}}</span></div>
+  <div class="row">PESEL&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="chip ph">{{VAULT_PESEL_9F2C41A0}}</span></div>
+</div>
+</div></body></html>

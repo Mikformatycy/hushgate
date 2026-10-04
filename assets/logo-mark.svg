@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 72" width="64" height="72" role="img" aria-label="HushGate">
+  <defs>
+    <linearGradient id="hg-shield" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#9BB9E0"/>
+      <stop offset="1" stop-color="#5C84B8"/>
+    </linearGradient>
+  </defs>
+  <!-- the gate: a shield -->
+  <path d="M32 3 L58 12 V34 C58 52 46.5 64 32 69.5 C17.5 64 6 52 6 34 V12 Z" fill="url(#hg-shield)"/>
+  <!-- the hush: a masked field, the value replaced by dots -->
+  <rect x="15" y="29" width="34" height="13" rx="6.5" fill="#FFFFFF"/>
+  <circle cx="24" cy="35.5" r="2.6" fill="#0C1A2B"/>
+  <circle cx="32" cy="35.5" r="2.6" fill="#0C1A2B"/>
+  <circle cx="40" cy="35.5" r="2.6" fill="#0C1A2B"/>
+</svg>
