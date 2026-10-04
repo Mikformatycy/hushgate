@@ -10,11 +10,11 @@ services:
     command: sh /scripts/gen-certs.sh
     volumes:
       - certs:/certs
-      - ./demo/corp/gen-certs.sh:/scripts/gen-certs.sh:ro
+      - ./5-implementation/demo/corp/gen-certs.sh:/scripts/gen-certs.sh:ro
     networks: [mgmt]
 
   internet:
-    build: { context: ., dockerfile: demo/corp/internet.Dockerfile }
+    build: { context: ./5-implementation, dockerfile: demo/corp/internet.Dockerfile }
     volumes: [certs:/certs:ro]
     networks:
       internet:
@@ -23,7 +23,7 @@ services:
       certs: { condition: service_completed_successfully }
 
   gate:
-    build: ./proxy
+    build: ./5-implementation/proxy
     environment:
       REDIS_ADDR: redis:6379
       ADMIN_TOKEN: ${ADMIN_TOKEN:-demo-admin-token}
@@ -33,11 +33,11 @@ services:
       CA_CERT_FILE: /certs/corp-ca.crt
       CA_KEY_FILE: /certs/corp-ca.key
       UPSTREAM_CA_FILES: /certs/internet-ca.crt
-    # Policy, device allowlist and approved LLM hosts: config/hushgate.yaml (live reload).
+    # Policy, device allowlist and approved LLM hosts: 5-implementation/config/hushgate.yaml (live reload).
     volumes:
       - certs:/certs:ro
-      - ./config:/etc/hushgate
-      - ./demo/workspace:/vault:ro
+      - ./5-implementation/config:/etc/hushgate
+      - ./5-implementation/demo/workspace:/vault:ro
       - audit:/var/log/hushgate
     networks: [corpnet, internet, backend, mgmt]
     depends_on:
@@ -53,7 +53,7 @@ services:
   prometheus:
     image: prom/prometheus:v3.5.0
     volumes:
-      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./5-implementation/deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
       - "9090:9090"
     networks: [backend, mgmt]
@@ -63,7 +63,7 @@ services:
   # (not the simulated internet) and the gate's admin port with a
   # suggestion-only token.
   advisor:
-    build: ./advisor
+    build: ./5-implementation/advisor
     environment:
       GATE_ADMIN_URL: http://gate:8081
       ADVISOR_TOKEN: ${ADVISOR_TOKEN:-demo-advisor-token}
@@ -72,7 +72,7 @@ services:
     depends_on: [gate]
 
   dashboard:
-    build: ./dashboard
+    build: ./5-implementation/dashboard
     environment:
       GATE_ADMIN_URL: http://gate:8081
       ADMIN_TOKEN: ${ADMIN_TOKEN:-demo-admin-token}
@@ -83,25 +83,25 @@ services:
 
   # Enrolled employee laptop: on the allowlist.
   jdoe-macbook:
-    build: { context: ., dockerfile: demo/corp/laptop.Dockerfile }
+    build: { context: ./5-implementation, dockerfile: demo/corp/laptop.Dockerfile }
     hostname: jdoe-macbook
     container_name: jdoe-macbook
-    env_file: demo/corp/mdm/jdoe-macbook.env
+    env_file: 5-implementation/demo/corp/mdm/jdoe-macbook.env
     volumes:
       - certs:/certs:ro
-      - ./demo/workspace:/workspace
+      - ./5-implementation/demo/workspace:/workspace
     networks: [corpnet]
     depends_on: [gate]
 
   # On the network, trusts the CA, but not registered as an agent node.
   guest-laptop:
-    build: { context: ., dockerfile: demo/corp/laptop.Dockerfile }
+    build: { context: ./5-implementation, dockerfile: demo/corp/laptop.Dockerfile }
     hostname: guest-laptop
     container_name: guest-laptop
-    env_file: demo/corp/mdm/guest-laptop.env
+    env_file: 5-implementation/demo/corp/mdm/guest-laptop.env
     volumes:
       - certs:/certs:ro
-      - ./demo/workspace:/workspace
+      - ./5-implementation/demo/workspace:/workspace
     networks: [corpnet]
     depends_on: [gate]
 

@@ -68,7 +68,7 @@ signatures:
   feeds:
     - /etc/hushgate/signatures.yaml # local baseline, always available
     # Central feed published by the security team; every gate pulls it.
-    - https://raw.githubusercontent.com/Mikformatycy/hushgate/dev/config/signatures.yaml
+    - https://raw.githubusercontent.com/Mikformatycy/hushgate/dev/5-implementation/config/signatures.yaml
   refresh_seconds: 60
   disabled: [] # signature ids to switch off, e.g. [HG-DESER-001]
 

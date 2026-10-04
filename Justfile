@@ -1,4 +1,6 @@
-# HushGate tasks. Run `just` to list them.
+# HushGate tasks. Run `just` to list them. Code lives in 5-implementation/.
+
+impl := "5-implementation"
 
 corp := "docker compose -f docker-compose.corp.yml"
 gw := "docker compose"
@@ -39,7 +41,7 @@ gateway-down:
 [group('setup')]
 fake-model:
     -pkill -f fake_upstream.py
-    nohup python3 demo/fake_upstream.py > /tmp/hushgate-fake-model.log 2>&1 &
+    nohup python3 {{ impl }}/demo/fake_upstream.py > /tmp/hushgate-fake-model.log 2>&1 &
     sleep 1
 
 # Same as gateway-offline
@@ -149,7 +151,7 @@ gw-reset:
 # Your own Claude Code through the gate (gateway-up first); uses your login or API key
 [group('gateway')]
 claude-code:
-    cd demo/workspace && ANTHROPIC_BASE_URL=http://localhost:8080 ANTHROPIC_CUSTOM_HEADERS="X-Agent-Id: my-claude-code" claude
+    cd {{ impl }}/demo/workspace && ANTHROPIC_BASE_URL=http://localhost:8080 ANTHROPIC_CUSTOM_HEADERS="X-Agent-Id: my-claude-code" claude
 
 # Real Claude Code inside the sandbox: the gate is its only way out (gateway-up first)
 [group('gateway')]
@@ -173,17 +175,17 @@ claude-sandbox-reset:
 # Edit the policy file; changes apply within a second
 [group('policy')]
 policy:
-    ${EDITOR:-vi} config/hushgate.yaml
+    ${EDITOR:-vi} {{ impl }}/config/hushgate.yaml
 
 # Edit the attack signature feed
 [group('policy')]
 signatures:
-    ${EDITOR:-vi} config/signatures.yaml
+    ${EDITOR:-vi} {{ impl }}/config/signatures.yaml
 
 # Edit the vault's protected secrets
 [group('policy')]
 vault:
-    ${EDITOR:-vi} demo/workspace/.env
+    ${EDITOR:-vi} {{ impl }}/demo/workspace/.env
 
 # --- Reporting ----------------------------------------------------------------
 
@@ -222,19 +224,19 @@ logs stack="gateway":
 # Automated test suite in Docker (no Go needed)
 [group('tests')]
 tests:
-    docker run --rm -v "$PWD":/src -w /src/proxy golang:1.26-alpine go test ./...
+    docker run --rm -v "$PWD":/src -w /src/{{ impl }}/proxy golang:1.26-alpine go test ./...
 
 # Test suite with the race detector (needs Go 1.26)
 [group('tests')]
 tests-local:
-    cd proxy && go test -race ./...
+    cd {{ impl }}/proxy && go test -race ./...
 
 # Preview and edit the launch video in Remotion Studio (needs Node)
 [group('video')]
 video-studio:
-    cd video && npm install && npm run studio
+    cd {{ impl }}/video && npm install && npm run studio
 
-# Render the launch video to video/out/hushgate.mp4 (needs Node)
+# Render the launch video to 5-implementation/video/out/hushgate.mp4 (needs Node)
 [group('video')]
 video:
-    cd video && npm install && npm run render
+    cd {{ impl }}/video && npm install && npm run render

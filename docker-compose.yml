@@ -2,7 +2,7 @@ name: hushgate
 
 services:
   proxy:
-    build: ./proxy
+    build: ./5-implementation/proxy
     environment:
       UPSTREAM_URL: ${UPSTREAM_URL:-https://api.anthropic.com}
       UPSTREAM_API_KEY: ${ANTHROPIC_API_KEY:-}
@@ -11,12 +11,12 @@ services:
       ADVISOR_TOKEN: ${ADVISOR_TOKEN:-demo-advisor-token}
       METRICS_TOKEN: ${METRICS_TOKEN:-demo-metrics-token}
       AUDIT_LOG_FILE: /var/log/hushgate/audit.jsonl
-    # Policy (tools, masking, budgets, models, ...) lives in config/hushgate.yaml
+    # Policy (tools, masking, budgets, models, ...) lives in 5-implementation/config/hushgate.yaml
     # and reloads live. Directories, not single files, are mounted so editor
     # saves (which replace the file) are seen.
     volumes:
-      - ./config:/etc/hushgate
-      - ./demo/workspace:/vault:ro
+      - ./5-implementation/config:/etc/hushgate
+      - ./5-implementation/demo/workspace:/vault:ro
       - audit:/var/log/hushgate
     ports:
       - "8080:8080"
@@ -28,7 +28,7 @@ services:
     depends_on: [redis]
 
   dashboard:
-    build: ./dashboard
+    build: ./5-implementation/dashboard
     environment:
       GATE_ADMIN_URL: http://proxy:8081
       ADMIN_TOKEN: ${ADMIN_TOKEN:-demo-admin-token}
@@ -40,7 +40,7 @@ services:
   # AI policy advisor (TypeSafe Jev): suggests decisions for the review queue. Its token can
   # only read reviews and post suggestions; a human applies them.
   advisor:
-    build: ./advisor
+    build: ./5-implementation/advisor
     environment:
       GATE_ADMIN_URL: http://proxy:8081
       ADVISOR_TOKEN: ${ADVISOR_TOKEN:-demo-advisor-token}
@@ -52,7 +52,7 @@ services:
   prometheus:
     image: prom/prometheus:v3.5.0
     volumes:
-      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./5-implementation/deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
       - "9090:9090"
     networks: [backend, egress]
@@ -65,14 +65,14 @@ services:
   # The agent only sits on the internal sandbox network: no route to the
   # internet, only to the proxy. It never holds the real API key.
   agent:
-    build: ./agent
+    build: ./5-implementation/agent
     environment:
       ANTHROPIC_BASE_URL: http://proxy:8080
       ANTHROPIC_API_KEY: placeholder-gate-injects-real-key
       AGENT_ID: demo-agent
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
     volumes:
-      - ./demo/workspace:/workspace
+      - ./5-implementation/demo/workspace:/workspace
     networks: [sandbox]
     depends_on: [proxy]
 
@@ -81,7 +81,7 @@ services:
   # from `claude setup-token` in .env as CLAUDE_CODE_OAUTH_TOKEN.
   # Start a session: just claude-sandbox
   claude-code:
-    build: ./sandbox/claude-code
+    build: ./5-implementation/sandbox/claude-code
     environment:
       ANTHROPIC_BASE_URL: http://proxy:8080
       ANTHROPIC_CUSTOM_HEADERS: "X-Agent-Id: claude-code-sandbox"
@@ -89,7 +89,7 @@ services:
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
       DISABLE_AUTOUPDATER: "1"
     volumes:
-      - ./demo/workspace:/workspace
+      - ./5-implementation/demo/workspace:/workspace
       - claude-home:/home/node/.claude
     networks: [sandbox]
     depends_on: [proxy]
