@@ -192,6 +192,34 @@ just claude-code
 #               ANTHROPIC_CUSTOM_HEADERS="X-Agent-Id: my-claude-code" claude
 ```
 
+## Use Claude Code inside the sandbox (the gate is its only way out)
+
+Once, on your own machine: create a token for your Claude subscription and put it in `.env` in the repository root.
+
+```sh
+claude setup-token
+# then add this line to .env:  CLAUDE_CODE_OAUTH_TOKEN=<the token>
+```
+
+Start the gateway (this also starts the sandboxed Claude Code):
+
+```sh
+just gateway-up
+```
+
+Open a Claude Code session in the sandbox:
+
+```sh
+just claude-sandbox
+# without just: docker compose exec claude-code claude
+```
+
+Check that it cannot reach the internet except through the gate:
+
+```sh
+just claude-sandbox-check
+```
+
 ## Change the rules (applies within a second)
 
 Change the policy (tools, masking, budgets, models, devices):

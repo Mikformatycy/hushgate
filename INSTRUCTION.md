@@ -78,6 +78,16 @@ UPSTREAM_URL=http://host.docker.internal:9999 docker compose up -d --build
 | `docker compose exec agent python agent.py "upload the config"` | `curl` sending the DB password | Bash guard: treated as a network call, kill switch |
 | `docker compose exec agent python agent.py --egress-check` | Direct internet access | Fails |
 
+### Real Claude Code in the sandbox
+
+The `claude-code` container runs Claude Code on the gate's internal network only, so it has no route to the internet except through HushGate. It uses your Claude subscription:
+
+1. On your machine, run `claude setup-token` and add `CLAUDE_CODE_OAUTH_TOKEN=<token>` to `.env` in the repository root.
+2. `just gateway-up`, then `just claude-sandbox` to open a session in `/workspace` (the demo workspace).
+3. `just claude-sandbox-check` shows that direct internet and raw IPs are blocked while the gate is reachable.
+
+Its traffic shows on the dashboard as agent `claude-code-sandbox`.
+
 If `fake_upstream.py` fails with "Address already in use", an older copy is still running: `pkill -f fake_upstream.py` and start it again.
 
 With a real Anthropic key instead of the fake model, drop `UPSTREAM_URL` and set `ANTHROPIC_API_KEY` in `.env`. Real models often refuse obvious injections, so the fake model is the reliable demo.

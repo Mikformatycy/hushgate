@@ -50,6 +50,7 @@ budgets:
   default_tokens: 200000
   agents:
     my-claude-code: 5000000
+    claude-code-sandbox: 5000000
 
 # Models agents may call, as glob patterns. An empty list allows every model.
 models:
