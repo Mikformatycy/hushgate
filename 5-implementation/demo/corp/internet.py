@@ -1,17 +1,18 @@
 """The simulated internet: one TLS server answering as three hosts.
 
 api.anthropic.com        approved provider (scripted model from fake_upstream)
+openrouter.ai            approved OpenAI-compatible provider (the same scripted model)
 llm.sketchy-vps.example  self-hosted OpenAI-compatible model on a VPS
 news.example             an ordinary website
 """
 import json
 import ssl
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import ThreadingHTTPServer
 
 import fake_upstream
 
 
-class H(BaseHTTPRequestHandler):
+class H(fake_upstream.H):  # inherits the scripted model for the approved providers
     def _send(self, code, ctype, body):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
@@ -27,6 +28,8 @@ class H(BaseHTTPRequestHandler):
 
     def do_POST(self):
         if self.path == "/v1/messages":
+            return fake_upstream.H.do_POST(self)
+        if self.path.endswith("/chat/completions") and self.headers.get("Host", "").startswith("openrouter.ai"):
             return fake_upstream.H.do_POST(self)
         if self.path.endswith("/chat/completions"):
             self.rfile.read(int(self.headers.get("Content-Length", 0)))

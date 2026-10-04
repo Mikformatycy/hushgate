@@ -6,6 +6,9 @@ services:
     environment:
       UPSTREAM_URL: ${UPSTREAM_URL:-https://api.anthropic.com}
       UPSTREAM_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # OpenAI-compatible Chat Completions (OpenRouter by default; set the key in .env)
+      OPENAI_UPSTREAM_URL: ${OPENAI_UPSTREAM_URL:-https://openrouter.ai/api}
+      OPENAI_UPSTREAM_API_KEY: ${OPENROUTER_API_KEY:-}
       REDIS_ADDR: redis:6379
       ADMIN_TOKEN: ${ADMIN_TOKEN:-demo-admin-token}
       ADVISOR_TOKEN: ${ADVISOR_TOKEN:-demo-advisor-token}
@@ -69,6 +72,8 @@ services:
     environment:
       ANTHROPIC_BASE_URL: http://proxy:8080
       ANTHROPIC_API_KEY: placeholder-gate-injects-real-key
+      OPENAI_BASE_URL: http://proxy:8080/v1 # agent_openai.py: the same agent over Chat Completions
+      OPENAI_API_KEY: placeholder-gate-injects-real-key
       AGENT_ID: demo-agent
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
     volumes:

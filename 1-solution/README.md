@@ -23,7 +23,7 @@ Coding agents such as Claude Code read source code, `.env` files and documents, 
 
 ### The approach
 
-1. **Sit on the only path.** Agents reach models only through HushGate. Developers set one environment variable (`ANTHROPIC_BASE_URL`). On a company network, the gate is a TLS-inspecting proxy installed by device management, so there is nothing to configure at all. A default-deny network ensures nothing goes around it.
+1. **Sit on the only path.** Agents reach models only through HushGate. Developers set one environment variable (`ANTHROPIC_BASE_URL`, or the base URL of any OpenAI-compatible client, such as one for OpenRouter). On a company network, the gate is a TLS-inspecting proxy installed by device management, so there is nothing to configure at all. A default-deny network ensures nothing goes around it.
 2. **Deterministic rules decide.** Every enforcement decision is made by rules: masking, tool policy, signatures, the Bash guard, budgets and allowlists. The same input always gets the same decision, and every decision names its rule. All of them together add well under a millisecond (see [2-architecture](../2-architecture/performance.md)).
 3. **AI advises where rules cannot decide.** A classifier (TypeSafe Jev) warns about prompt injection in what agents read, and suggests decisions for cases the rules can't settle. It never sees secret values and runs off the request path. It applies a decision only where the policy file explicitly allows it (`review.auto_accept`).
 4. **Fail closed, but keep developers working.** Unknown tools are denied and unknown values are masked. Local tools still get the real values back, so the agent's work gets done; only data leaving the machine is controlled.

@@ -28,20 +28,23 @@ const maxBody = 64 << 20
 
 type Gateway struct {
 	Upstream    *url.URL
-	UpstreamKey string                   // if set, replaces the agent's x-api-key so agents never hold the real key
-	TokenLimit  int64                    // per agent; 0 = unlimited (used when Limits is nil)
-	Limits      func(agent string) int64 // optional per-agent budgets from the live policy
-	ModelOK     func(model string) bool  // optional allowed-models check from the live policy
-	Client      *http.Client
-	Vault       *vault.Vault
-	Policy      *policy.Policy
-	Budget      budget.Store
-	Audit       audit.Logger
-	Reviews     *review.Store // optional: queue tools that have no policy rule
-	Scans       *scan.Store   // optional: queue tool results for injection scanning
-	Guard       *shell.Guard  // optional: shell calls that reach the network count as network tools
-	Signatures  *signature.Set
-	Metrics     *metrics.Metrics // optional; nil-safe
+	UpstreamKey string // if set, replaces the agent's x-api-key so agents never hold the real key
+	// Chat Completions (OpenAI-compatible) requests go here when set, else to Upstream.
+	ChatUpstream    *url.URL
+	ChatUpstreamKey string                   // if set, sent as the Bearer token for Chat Completions requests
+	TokenLimit      int64                    // per agent; 0 = unlimited (used when Limits is nil)
+	Limits          func(agent string) int64 // optional per-agent budgets from the live policy
+	ModelOK         func(model string) bool  // optional allowed-models check from the live policy
+	Client          *http.Client
+	Vault           *vault.Vault
+	Policy          *policy.Policy
+	Budget          budget.Store
+	Audit           audit.Logger
+	Reviews         *review.Store // optional: queue tools that have no policy rule
+	Scans           *scan.Store   // optional: queue tool results for injection scanning
+	Guard           *shell.Guard  // optional: shell calls that reach the network count as network tools
+	Signatures      *signature.Set
+	Metrics         *metrics.Metrics // optional; nil-safe
 }
 
 var hopHeaders = map[string]bool{
@@ -61,6 +64,11 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer func() { g.Metrics.Request(route(r.URL.Path), sw.code, time.Since(start)) }()
 
 	ctx := r.Context()
+	chat := r.Method == http.MethodPost && isChat(r.URL.Path)
+	fail := apiError // errors in the format the agent's client parses
+	if chat {
+		fail = chatError
+	}
 	agent := r.Header.Get("X-Agent-Id")
 	if agent == "" {
 		agent = "default"
@@ -69,12 +77,12 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	st, err := g.Budget.Status(ctx, agent)
 	if err != nil {
 		log.Printf("budget status: %v", err)
-		apiError(w, http.StatusServiceUnavailable, "api_error", "hushgate: budget store unavailable")
+		fail(w, http.StatusServiceUnavailable, "api_error", "hushgate: budget store unavailable")
 		return
 	}
 	if st.Killed {
 		g.Audit.Record(audit.Event{Agent: agent, Kind: "denied", Reason: "killed: " + st.KillReason})
-		apiError(w, http.StatusForbidden, "permission_error", "hushgate: agent halted: "+st.KillReason)
+		fail(w, http.StatusForbidden, "permission_error", "hushgate: agent halted: "+st.KillReason)
 		return
 	}
 	limit := g.TokenLimit
@@ -83,24 +91,24 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if limit > 0 && st.Used >= limit {
 		g.Audit.Record(audit.Event{Agent: agent, Kind: "denied", Reason: "token budget exhausted", Usage: st.Used})
-		apiError(w, http.StatusForbidden, "permission_error",
+		fail(w, http.StatusForbidden, "permission_error",
 			fmt.Sprintf("hushgate: token budget exhausted (%d/%d)", st.Used, limit))
 		return
 	}
 
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxBody))
 	if err != nil {
-		apiError(w, http.StatusBadRequest, "invalid_request_error", "hushgate: cannot read body")
+		fail(w, http.StatusBadRequest, "invalid_request_error", "hushgate: cannot read body")
 		return
 	}
-	if g.ModelOK != nil && strings.HasPrefix(r.URL.Path, "/v1/messages") {
+	if g.ModelOK != nil && (strings.HasPrefix(r.URL.Path, "/v1/messages") || chat) {
 		var req struct {
 			Model string `json:"model"`
 		}
 		if json.Unmarshal(body, &req) == nil && req.Model != "" && !g.ModelOK(req.Model) {
 			g.Audit.Record(audit.Event{Agent: agent, Kind: "model_blocked", Tool: req.Model,
 				Reason: "model " + req.Model + " is not in models.allow"})
-			apiError(w, http.StatusForbidden, "permission_error",
+			fail(w, http.StatusForbidden, "permission_error",
 				"hushgate: model "+req.Model+" is not allowed by policy")
 			return
 		}
@@ -116,6 +124,11 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		g.discoverTools(agent, body)
 		g.queueToolResults(agent, body)
 	}
+	if chat {
+		g.discoverChatTools(agent, body)
+		g.queueChatToolResults(agent, body)
+		body = withUsage(body)
+	}
 
 	g.Metrics.Observe(metrics.StagePreprocess, time.Since(start))
 	upstreamStart := time.Now()
@@ -123,7 +136,7 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	g.Metrics.Observe(metrics.StageUpstreamTTFB, time.Since(upstreamStart))
 	if err != nil {
 		log.Printf("upstream: %v", err)
-		apiError(w, http.StatusBadGateway, "api_error", "hushgate: upstream unreachable")
+		fail(w, http.StatusBadGateway, "api_error", "hushgate: upstream unreachable")
 		return
 	}
 	defer resp.Body.Close()
@@ -150,10 +163,30 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case isMessages && resp.StatusCode == http.StatusOK && strings.HasPrefix(ct, "application/json"):
 		raw, err := io.ReadAll(resp.Body)
 		if err != nil {
-			apiError(w, http.StatusBadGateway, "api_error", "hushgate: upstream read failed")
+			fail(w, http.StatusBadGateway, "api_error", "hushgate: upstream read failed")
 			return
 		}
 		out, usage := g.filterMessage(ctx, agent, raw)
+		w.WriteHeader(resp.StatusCode)
+		w.Write(out)
+		g.recordUsage(ctx, agent, usage)
+	case chat && resp.StatusCode == http.StatusOK && strings.HasPrefix(ct, "text/event-stream"):
+		w.WriteHeader(resp.StatusCode)
+		s := &chatStream{g: g, ctx: ctx, agent: agent, w: w, calls: map[int][]*chatCall{}}
+		if f, ok := w.(http.Flusher); ok {
+			s.flush = f.Flush
+		}
+		if err := s.run(resp.Body); err != nil {
+			log.Printf("chat stream: %v", err)
+		}
+		g.recordUsage(ctx, agent, s.usage)
+	case chat && resp.StatusCode == http.StatusOK && strings.HasPrefix(ct, "application/json"):
+		raw, err := io.ReadAll(resp.Body)
+		if err != nil {
+			fail(w, http.StatusBadGateway, "api_error", "hushgate: upstream read failed")
+			return
+		}
+		out, usage := g.filterChat(ctx, agent, raw)
 		w.WriteHeader(resp.StatusCode)
 		w.Write(out)
 		g.recordUsage(ctx, agent, usage)
@@ -164,7 +197,11 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g *Gateway) forward(ctx context.Context, r *http.Request, body []byte) (*http.Response, error) {
+	chat := isChat(r.URL.Path)
 	u := *g.Upstream
+	if chat && g.ChatUpstream != nil {
+		u = *g.ChatUpstream
+	}
 	u.Path = strings.TrimSuffix(u.Path, "/") + r.URL.Path
 	u.RawQuery = r.URL.RawQuery
 	req, err := http.NewRequestWithContext(ctx, r.Method, u.String(), bytes.NewReader(body))
@@ -178,7 +215,10 @@ func (g *Gateway) forward(ctx context.Context, r *http.Request, body []byte) (*h
 	}
 	// identity keeps SSE readable chunk-by-chunk
 	req.Header.Set("Accept-Encoding", "identity")
-	if g.UpstreamKey != "" {
+	switch {
+	case chat && g.ChatUpstreamKey != "":
+		req.Header.Set("Authorization", "Bearer "+g.ChatUpstreamKey)
+	case !chat && g.UpstreamKey != "":
 		req.Header.Set("X-Api-Key", g.UpstreamKey)
 		req.Header.Del("Authorization")
 	}
@@ -370,6 +410,9 @@ func route(path string) string {
 		return "messages"
 	case "/v1/messages/count_tokens":
 		return "count_tokens"
+	}
+	if isChat(path) {
+		return "chat_completions"
 	}
 	return "other"
 }

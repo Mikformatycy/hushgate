@@ -136,6 +136,8 @@ func (p *Proxy) handle(w http.ResponseWriter, r *http.Request, scheme, hostport 
 	default:
 		gw := *p.Gateway
 		gw.Upstream = &url.URL{Scheme: scheme, Host: trimDefaultPort(scheme, hostport)}
+		// Every format goes to the host the device asked for, with the device's own credentials.
+		gw.ChatUpstream, gw.ChatUpstreamKey = nil, ""
 		r.Header.Set("X-Agent-Id", node.ID) // identity comes from the device, not the agent
 		gw.ServeHTTP(w, r)
 	}

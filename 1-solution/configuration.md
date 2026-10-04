@@ -22,8 +22,8 @@ All policy lives in one YAML file. In the demo it is [`5-implementation/config/h
 | `vault.overrides.<NAME>` | `C0`–`C3` | — | Pins a variable's tier. Review decisions are written here. A trailing `# @class: C3` comment in the `.env` does the same. |
 | `budgets.default_tokens` | integer, `0` = unlimited | `0` (the demo uses 200,000) | Token budget for any agent without its own. When it is used up, requests get `403` until the agent is reset. |
 | `budgets.agents.<agent>` | integer | — | Budget for one agent (the `X-Agent-Id` header, or the device id in company-network mode). |
-| `models.allow` | glob patterns | `[]` = any model | Models agents may call, for example `claude-haiku-*`. Other models get `403`. |
-| `llm_hosts.approved` | hostnames | `[]` | Company-network mode: the only LLM providers devices may reach. LLM traffic to any other host (recognised by its shape) is blocked as shadow AI. |
+| `models.allow` | glob patterns | `[]` = any model | Models agents may call, for example `claude-haiku-*`, or `*/claude-*` for OpenRouter-style ids such as `anthropic/claude-haiku-4.5`. Other models get `403`. |
+| `llm_hosts.approved` | hostnames | `[]` | Company-network mode: the only LLM providers devices may reach. LLM traffic to any other host (recognised by its shape) is blocked as shadow AI. Anthropic Messages and OpenAI-compatible Chat Completions to an approved host (for example `openrouter.ai`) are fully inspected. |
 | `nodes[]` | `id`, `owner`, `token` | `[]` | Company-network mode: devices allowed to use AI. The token comes from device management; LLM traffic from any other device is blocked. |
 | `signatures.feeds` | file paths or URLs | `[]` | Attack signature feeds. A later feed overrides an earlier one with the same signature id. A feed that fails to load keeps its last good copy. |
 | `signatures.refresh_seconds` | integer ≥ 10 | `300` (the demo uses 60) | How often URL feeds are fetched again. |

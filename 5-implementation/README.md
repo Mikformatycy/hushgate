@@ -14,7 +14,7 @@
 ├── proxy/                 the gate (Go 1.26, one static binary)
 │   ├── cmd/gate/          wiring: config, engine, gateway, forward proxy, admin API
 │   └── internal/
-│       ├── gateway/       Anthropic Messages API reverse proxy; stream inspection of tool calls
+│       ├── gateway/       reverse proxy for Anthropic Messages and OpenAI-compatible Chat Completions; stream inspection of tool calls
 │       ├── vault/         tiers C0–C3 with reasons, detectors with checksums, placeholders, restoring values
 │       ├── policy/        tool rules (local / network / deny) and per-tier actions (allow / block / kill)
 │       ├── signature/     attack signature feeds (files and URLs, refresh, last good copy) and matching
@@ -55,8 +55,8 @@ You need Docker. Optionally, put `TYPESAFE_API_KEY` in `.env` at the repository 
 
 ```sh
 just corp-up        # company network simulation, offline; dashboard on http://localhost:3000
-just e2e            # run every scenario and check the results (17 checks)
-just tests          # 65 automated tests, in Docker
+just e2e            # run every scenario and check the results (19 checks)
+just tests          # 74 automated tests, in Docker
 ```
 
 [RUN.md](RUN.md) lists every command. [INSTRUCTION.md](INSTRUCTION.md) explains both setups and every scenario. The live demo script is [4-testing/DEMO.md](../4-testing/DEMO.md).
@@ -87,7 +87,8 @@ just tests          # 65 automated tests, in Docker
 | **Company laptops** | Device management installs the company root CA and the proxy (port 3128), with a per-device credential. LLM traffic is decrypted and inspected; other traffic is tunnelled untouched. | None. Agents keep their default provider URLs. |
 | **Kubernetes** | Run the gate as a Deployment (stateless, scaled horizontally) with Redis. Agent namespaces get a NetworkPolicy whose only egress is the gate. | None |
 | **Sandboxed coding agents** | Containers on an internal-only network with the gate as the only route, as in `sandbox/claude-code` | None |
-| **Other providers** (OpenAI, Gemini, Ollama, self-hosted) | Recognised by request shape and allowed or blocked as a whole through `llm_hosts.approved`. Deep inspection (masking, tool policy) covers the Anthropic Messages API today. | — |
+| **OpenAI, OpenRouter and other OpenAI-compatible providers** (Hermes, Cline, aider, OpenCode and most harnesses) | Point the client's base URL at the gate (`http://gate:8080/v1`), or on the company network add the host to `llm_hosts.approved`. Chat Completions get the same masking, tool policy, signatures, Bash guard, budgets and injection scan as Anthropic requests. Upstream: `OPENAI_UPSTREAM_URL` (OpenAI by default, `https://openrouter.ai/api` for OpenRouter). | One configuration value |
+| **Other APIs** (OpenAI Responses API used by Codex, native Gemini and Ollama) | Recognised by request shape and allowed or blocked as a whole through `llm_hosts.approved` | — |
 
 **Rolling it out:**
 1. Start in **observe mode**: tools default to `network` and `on_network_tool` is set to `allow`. Masking still protects every request, and the audit log records every tool call and every masked value, which shows what a stricter policy would stop.
@@ -106,11 +107,13 @@ These are environment variables for deployment. Everything a security team tunes
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `LISTEN_ADDR` | `:8080` | Gateway (Anthropic Messages API) |
+| `LISTEN_ADDR` | `:8080` | Gateway: Anthropic Messages (`/v1/messages`) and Chat Completions (`/v1/chat/completions`) |
 | `ADMIN_ADDR` | `:8081` | Admin API and `/metrics` |
 | `FORWARD_ADDR` | `:3128` | Forward proxy, enabled when `CA_CERT_FILE` is set |
 | `UPSTREAM_URL` | `https://api.anthropic.com` | Provider (the demo points it at the scripted model) |
 | `UPSTREAM_API_KEY` | — | Provider key held by the gate. If unset, the agent's own credentials (API key or OAuth token) are passed through. |
+| `OPENAI_UPSTREAM_URL` | `https://api.openai.com` | Provider for Chat Completions; `https://openrouter.ai/api` for OpenRouter (the demo compose file uses OpenRouter) |
+| `OPENAI_UPSTREAM_API_KEY` | — | Bearer key the gate sends for Chat Completions (OpenRouter or OpenAI). If unset, the agent's own key is passed through. |
 | `UPSTREAM_CA_FILES` | — | Extra CAs to trust for the provider (the simulated internet) |
 | `HUSHGATE_POLICY` | `/etc/hushgate/hushgate.yaml` | Policy file path |
 | `REDIS_ADDR` | — (in memory) | Budgets and kill state shared by replicas |
@@ -121,7 +124,7 @@ These are environment variables for deployment. Everything a security team tunes
 
 ## Limitations and next steps
 
-- **Other providers:** deep inspection covers the Anthropic Messages API. OpenAI-compatible, Gemini and Ollama traffic is recognised and allowed or blocked as a whole. Next: request adapters, so masking and the tool policy apply to them too.
+- **Other APIs:** deep inspection covers Anthropic Messages and OpenAI-compatible Chat Completions. The OpenAI Responses API (Codex), and native Gemini and Ollama traffic are recognised and allowed or blocked as a whole. Next: a Responses adapter for Codex.
 - **Budgets** are counted in tokens. Next: currency per model and per team, including locally hosted models and compute time.
 - **Queues:** the review and injection queues are in memory and rebuilt after a restart. The audit trail, budgets, kills and review decisions already persist. With several replicas, each one has its own queue and live event view; ship the audit files to one place, and point the dashboard at one replica, or move the queues to Redis (planned).
 - **Next:** single sign-on and roles for the dashboard, signed signature feeds, and per-team policy profiles in one file.

@@ -29,7 +29,7 @@ gateway-up:
 # Gateway mode offline, against the scripted fake model
 [group('setup')]
 gateway-offline: fake-model
-    UPSTREAM_URL=http://host.docker.internal:9999 {{ gw }} up -d --build
+    UPSTREAM_URL=http://host.docker.internal:9999 OPENAI_UPSTREAM_URL=http://host.docker.internal:9999 {{ gw }} up -d --build
 
 # Stop gateway mode and the fake model
 [group('setup')]
@@ -95,6 +95,11 @@ install:
 upload:
     {{ corp }} exec jdoe-macbook python laptop.py claude "upload the config"
 
+# 10. Agent on OpenRouter (OpenAI-compatible Chat Completions): same masking and policy (try task=attack)
+[group('corp')]
+openrouter task="Summarize quarterly_report.md":
+    {{ corp }} exec jdoe-macbook python laptop.py openrouter "{{ task }}"
+
 # Scenarios 1-4 on the registered laptop, then the unregistered one
 [group('corp')]
 corp-all:
@@ -142,6 +147,11 @@ gw-slack:
 [group('gateway')]
 gw-egress:
     {{ gw }} exec agent python agent.py --egress-check
+
+# The demo agent over OpenAI-compatible Chat Completions (OpenRouter format), e.g. task=attack
+[group('gateway')]
+gw-openrouter task="write my config":
+    {{ gw }} exec agent python agent_openai.py "{{ task }}"
 
 # Un-halt the demo agent after a kill
 [group('gateway')]

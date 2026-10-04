@@ -18,7 +18,7 @@ ca internet-ca "Simulated Public CA"
 openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
   -keyout internet.key -out internet.csr -subj "/CN=internet" 2>/dev/null
 cat > internet.ext <<EXT
-subjectAltName=DNS:api.anthropic.com,DNS:llm.sketchy-vps.example,DNS:news.example
+subjectAltName=DNS:api.anthropic.com,DNS:openrouter.ai,DNS:llm.sketchy-vps.example,DNS:news.example
 basicConstraints=CA:FALSE
 keyUsage=critical,digitalSignature
 extendedKeyUsage=serverAuth

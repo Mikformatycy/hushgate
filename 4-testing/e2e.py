@@ -154,6 +154,25 @@ def scenarios():
     reset()
 
 
+# --- OpenAI-compatible Chat Completions (OpenRouter) ------------------------------
+
+def chat_completions():
+    since = last_id()
+    out = run(LAPTOP, "openrouter", "Summarize quarterly_report.md")
+    mask = wait_for(since, kind("mask", agent=LAPTOP))
+    write = wait_for(since, kind("tool_call", agent=LAPTOP, tool="write_file", action="allow"))
+    check("10. Agent on OpenRouter (Chat Completions): secrets masked, real value restored locally",
+          bool(mask and write and "Tr0ub4dor" in out),
+          f"placeholders sent: {', '.join((mask or {}).get('tokens') or [])}; local write_file allowed with the real value")
+
+    since = last_id()
+    run(LAPTOP, "openrouter", "attack")
+    kill = wait_for(since, kind("tool_call", tool="send_email", action="kill"))
+    check("11. Agent on OpenRouter hijacked by the poisoned report: email with secrets killed",
+          bool(kill), (kill or {}).get("reason", "no kill"))
+    reset()
+
+
 # --- Live policy edits -----------------------------------------------------------
 
 class PolicyEdit:
@@ -183,14 +202,14 @@ def policy_edits():
     with PolicyEdit("tools:\n  default: deny", "toolz:\n  default: deny") as edit:
         status = api("/api/config")["policy_file"]
         ok = (edit.event or {}).get("action") == "rejected" and bool(status.get("error"))
-        check("10. Invalid policy edit rejected; previous policy stays active",
+        check("12. Invalid policy edit rejected; previous policy stays active",
               ok, ((edit.event or {}).get("reason") or "no policy event")[:110])
 
     with PolicyEdit("    write_file: local", "    write_file: deny") as edit:
         since = last_id()
         run(LAPTOP, "claude", "Summarize quarterly_report.md")
         e = wait_for(since, kind("tool_call", tool="write_file", action="block"))
-        check("11. Policy edit applies live: write_file denied",
+        check("13. Policy edit applies live: write_file denied",
               bool(edit.event and e), f"{(edit.event or {}).get('reason', '')}; then: {(e or {}).get('reason', 'not blocked')}")
 
     with PolicyEdit("  agents:\n", "  agents:\n    jdoe-macbook: 1\n") as edit:
@@ -198,14 +217,14 @@ def policy_edits():
         run(LAPTOP, "claude", "Summarize quarterly_report.md")
         run(LAPTOP, "claude", "Summarize quarterly_report.md")
         e = wait_for(since, kind("denied", agent=LAPTOP, reason=lambda r: "budget" in r))
-        check("12. Per-agent token budget enforced (hard stop)",
+        check("14. Per-agent token budget enforced (hard stop)",
               bool(e), f"{(edit.event or {}).get('reason', '')}; then: {(e or {}).get('reason', 'not denied')}")
 
     with PolicyEdit("  allow:\n    - claude-*", "  allow:\n    - claude-opus-*") as edit:
         since = last_id()
         run(LAPTOP, "claude", "Summarize quarterly_report.md")
         e = wait_for(since, kind("model_blocked"))
-        check("13. Model allowlist enforced: a model outside it is refused",
+        check("15. Model allowlist enforced: a model outside it is refused",
               bool(e), f"{(edit.event or {}).get('reason', '')}; then: {(e or {}).get('reason', 'not refused')}")
 
 
@@ -215,13 +234,13 @@ def reporting():
     perf = api("/api/metrics/summary")
     stages = perf.get("stages", {})
     pre = stages.get("preprocess", {})
-    check("14. Performance metrics recorded per stage",
+    check("16. Performance metrics recorded per stage",
           all(stages.get(s, {}).get("count") for s in ("preprocess", "tool_decision", "total")),
           f"gate request checks p50 {pre.get('p50_ms', 0) * 1000:.0f} µs over {pre.get('count', 0)} requests")
 
     csv = api("/api/audit/export?format=csv&blocked=1")
     lines = [l for l in csv.splitlines() if l.strip()]
-    check("15. Audit trail exports as CSV (blocked and killed only)",
+    check("17. Audit trail exports as CSV (blocked and killed only)",
           len(lines) > 3 and lines[0].startswith("time"), f"{len(lines) - 1} rows, columns: {lines[0][:80] if lines else '-'}")
 
     q = urllib.parse.quote("sum by (action) (hushgate_tool_calls_total)")
@@ -231,7 +250,7 @@ def reporting():
         if found:
             break
         time.sleep(1)
-    check("16. Prometheus scrapes the gate's metrics",
+    check("18. Prometheus scrapes the gate's metrics",
           bool(found), ", ".join(f"{r['metric'].get('action')}={r['value'][1]}" for r in found) or "no series yet")
 
 
@@ -243,6 +262,7 @@ def main():
     reset()
     print("HushGate end-to-end checks (company network demo)\n")
     scenarios()
+    chat_completions()
     policy_edits()
     reporting()
     passed = sum(1 for _, ok in results if ok)
