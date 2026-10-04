@@ -1,230 +1,124 @@
 import React from 'react';
-import {AbsoluteFill, Easing, interpolate, spring, useCurrentFrame} from 'remotion';
+import {Easing, interpolate, interpolateColors, spring} from 'remotion';
 import type {SpringConfig} from 'remotion';
-import {C, MONO, SANS, SHADOW} from './theme';
+import {C, MONO} from './theme';
 
 export const FPS = 30;
-const clamp = {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'} as const;
-export const easeOut = Easing.bezier(0.16, 1, 0.3, 1);
 export const easeInOut = Easing.bezier(0.65, 0, 0.35, 1);
+export const easeOut = Easing.bezier(0.16, 1, 0.3, 1);
+const clamp = {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'} as const;
 
 export const tw = (f: number, a: number, b: number, from = 0, to = 1, easing = easeOut) =>
   interpolate(f, [a, b], [from, to], {...clamp, easing});
 export const sp = (f: number, at: number, config: Partial<SpringConfig> = {}) =>
-  spring({frame: f - at, fps: FPS, config: {damping: 15, stiffness: 170, mass: 0.7, ...config}});
-// 1 at frame `at`, fading to 0 over `len` frames: a flash.
+  spring({frame: f - at, fps: FPS, config: {damping: 16, stiffness: 170, mass: 0.7, ...config}});
 export const bump = (f: number, at: number, len = 10) => (f < at ? 0 : Math.max(0, 1 - (f - at) / len));
 
-type Kids = {children?: React.ReactNode};
+// Keyframes: [frame, value] pairs, eased between neighbours.
+export const kf = (f: number, keys: [number, number][], easing = easeInOut) => {
+  if (f <= keys[0][0]) return keys[0][1];
+  for (let i = 0; i < keys.length - 1; i++) {
+    const [f0, v0] = keys[i], [f1, v1] = keys[i + 1];
+    if (f <= f1) return v0 + (v1 - v0) * easing((f - f0) / (f1 - f0));
+  }
+  return keys[keys.length - 1][1];
+};
+export const kc = (f: number, keys: [number, string][]) =>
+  keys.length < 2 ? keys[0][1] : interpolateColors(f, keys.map((k) => k[0]), keys.map((k) => k[1]));
 
-export const Bg: React.FC<Kids & {color: string}> = ({color, children}) => (
-  <AbsoluteFill style={{background: color, fontFamily: SANS, color: C.ink, overflow: 'hidden'}}>{children}</AbsoluteFill>
+export type Rect = {x: number; y: number; w: number; h: number; r: number};
+// Morph a rectangle between keyframed shapes.
+export const kr = (f: number, keys: [number, Rect][]): Rect => {
+  const g = (p: keyof Rect) => kf(f, keys.map(([t, r]) => [t, r[p]] as [number, number]));
+  return {x: g('x'), y: g('y'), w: g('w'), h: g('h'), r: g('r')};
+};
+export const box = (r: Rect): React.CSSProperties => ({position: 'absolute', left: r.x, top: r.y, width: r.w, height: r.h, borderRadius: r.r});
+
+// Opacity window: fades in over [a, a+fi], out over [b-fo, b].
+export const win = (f: number, a: number, b: number, fi = 10, fo = 10) => Math.min(tw(f, a, a + fi), 1 - tw(f, b - fo, b));
+
+/* ---------- Morphing caption: one line that rewrites itself ---------- */
+
+export type Cue = [number, number, string, string?];
+export const Caption: React.FC<{f: number; cues: Cue[]; color: string; accent?: string; top?: number; size?: number}> = ({f, cues, color, accent = C.gs, top = 84, size = 64}) => (
+  <>
+    {cues.map(([a, b, text, acc]) => {
+      if (f < a || f > b) return null;
+      const i = tw(f, a, a + 12), o = tw(f, b - 8, b, 0, 1, Easing.in(Easing.quad));
+      return (
+        <div key={a} style={{position: 'absolute', left: 0, right: 0, top, textAlign: 'center', fontSize: size, fontWeight: 800, letterSpacing: '-0.03em', color, opacity: i * (1 - o), filter: `blur(${(1 - i) * 10 + o * 10}px)`, transform: `translateY(${(1 - i) * 26 - o * 22}px)`}}>
+          {text.split(/(\*[^*]+\*)/).map((part, k) =>
+            part.startsWith('*') ? <span key={k} style={{color: acc ?? accent}}>{part.slice(1, -1)}</span> : <span key={k}>{part}</span>,
+          )}
+        </div>
+      );
+    })}
+  </>
 );
 
-// Big kinetic headline: each word rises out of a mask.
-export const Headline: React.FC<{text: string; at: number; out?: number; top: number; size?: number; color?: string; accent?: string; accentWords?: number[]}> = ({
-  text, at, out, top, size = 96, color = C.ink, accent = C.orange, accentWords = [],
-}) => {
-  const f = useCurrentFrame();
-  const o = out === undefined ? 1 : 1 - tw(f, out, out + 10);
-  return (
-    <div style={{position: 'absolute', left: 60, right: 60, top, textAlign: 'center', fontSize: size, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.12, color, opacity: o}}>
-      {text.split(' ').map((w, i) => {
-        const p = sp(f, at + i * 3, {damping: 20, stiffness: 210});
-        return (
-          <span key={i} style={{display: 'inline-block', overflow: 'hidden', verticalAlign: 'top', padding: '0 0.13em 0.14em'}}>
-            <span style={{display: 'inline-block', transform: `translateY(${(1 - p) * 110}%)`, color: accentWords.includes(i) ? accent : undefined}}>{w}</span>
-          </span>
-        );
-      })}
-    </div>
-  );
-};
+/* ---------- Small pieces ---------- */
 
-export const Pop: React.FC<Kids & {at: number; from?: number; y?: number; style?: React.CSSProperties; cfg?: Partial<SpringConfig>}> = ({
-  at, from = 0.7, y = 30, style, cfg, children,
-}) => {
-  const p = sp(useCurrentFrame(), at, cfg);
-  return <div style={{...style, opacity: Math.min(1, Math.max(0, p) * 1.6), transform: `translateY(${(1 - p) * y}px) scale(${from + (1 - from) * p})`}}>{children}</div>;
-};
-
-// A UI panel that swings in from a 3D tilt and settles flat.
-export const Tilt: React.FC<Kids & {at: number; rx?: number; ry?: number; rz?: number; s?: number; style?: React.CSSProperties}> = ({
-  at, rx = 24, ry = -18, rz = 3, s = 0.84, style, children,
-}) => {
-  const f = useCurrentFrame();
-  const p = sp(f, at, {damping: 22, stiffness: 60, mass: 1});
-  return (
-    <div style={{...style, opacity: tw(f, at, at + 10), transform: `perspective(2600px) rotateX(${rx * (1 - p)}deg) rotateY(${ry * (1 - p)}deg) rotateZ(${rz * (1 - p)}deg) scale(${s + (1 - s) * p})`}}>
-      {children}
-    </div>
-  );
-};
-
-// Camera moves: keyframes of [frame, scale, x, y].
-export const Camera: React.FC<Kids & {keys: [number, number, number, number][]; origin?: string}> = ({keys, origin = '50% 50%', children}) => {
-  const f = useCurrentFrame();
-  const v = (i: 1 | 2 | 3) => (keys.length < 2 ? keys[0][i] : interpolate(f, keys.map((k) => k[0]), keys.map((k) => k[i]), {...clamp, easing: easeInOut}));
-  return <AbsoluteFill style={{transformOrigin: origin, transform: `translate(${v(2)}px, ${v(3)}px) scale(${v(1)})`}}>{children}</AbsoluteFill>;
-};
-
-/* ---------- Dashboard pieces, scaled up for 1080p ---------- */
-
-export const ShieldIcon: React.FC<{size?: number; color?: string}> = ({size = 40, color = C.orange}) => (
+export const Shield: React.FC<{size: number; color?: string}> = ({size, color = C.gs}) => (
   <svg viewBox="0 0 24 24" width={size} height={size} style={{display: 'block'}}>
     <path fill={color} d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3z" />
   </svg>
 );
 
-export const Card: React.FC<Kids & {style?: React.CSSProperties}> = ({style, children}) => (
-  <div style={{background: '#fff', borderRadius: 14, boxShadow: SHADOW, ...style}}>{children}</div>
-);
-
-export const Metric: React.FC<Kids & {label: string; value: React.ReactNode; style?: React.CSSProperties; valueSize?: number}> = ({label, value, style, valueSize = 76, children}) => (
-  <Card style={{padding: '26px 32px', ...style}}>
-    <div style={{fontSize: 24, color: C.sub}}>{label}</div>
-    <div style={{fontSize: valueSize, fontWeight: 300, color: C.link, lineHeight: 1.15, margin: '4px 0 6px'}}>{value}</div>
-    <div style={{display: 'flex', flexDirection: 'column', gap: 4, fontSize: 22}}>{children}</div>
-  </Card>
-);
-
-export type Tone = 'ok' | 'bad' | 'warn' | 'info';
-const TONE: Record<Tone, [string, string]> = {ok: [C.ok, '✓'], bad: [C.bad, '⊗'], warn: [C.warnInk, '⚠'], info: [C.link, 'ⓘ']};
-export const Status: React.FC<Kids & {tone: Tone; size?: number; style?: React.CSSProperties}> = ({tone, size, style, children}) => (
-  <span style={{display: 'inline-flex', alignItems: 'center', gap: '0.35em', fontWeight: 600, color: TONE[tone][0], fontSize: size, whiteSpace: 'nowrap', ...style}}>
-    <span>{TONE[tone][1]}</span>{children}
-  </span>
-);
-
-export const Panel: React.FC<Kids & {title: string; actions?: React.ReactNode; style?: React.CSSProperties}> = ({title, actions, style, children}) => (
-  <Card style={{overflow: 'hidden', ...style}}>
-    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: 76, padding: '0 32px', borderBottom: `1px solid ${C.line}`}}>
-      <div style={{fontSize: 30, fontWeight: 700}}>{title}</div>
-      {actions}
-    </div>
-    {children}
-  </Card>
-);
-
-export const Row: React.FC<Kids & {cols: string; head?: boolean; style?: React.CSSProperties}> = ({cols, head, style, children}) => (
-  <div style={{display: 'grid', gridTemplateColumns: cols, alignItems: 'center', gap: 24, padding: '0 32px', height: head ? 54 : 78, fontSize: head ? 20 : 24, fontWeight: head ? 700 : 400, color: head ? C.sub : C.ink, background: head ? '#fafafa' : undefined, borderBottom: `1px solid ${C.line}`, ...style}}>
+export type ChipTone = 'secret' | 'masked' | 'plain' | 'killed';
+const CHIP: Record<ChipTone, [string, string, string]> = {
+  secret: [C.bad, '#FFFFFF', C.bad],
+  masked: [C.gsTint, C.gsDeep, C.gs],
+  plain: ['#1B3150', '#C9D8EA', C.navyLine],
+  killed: [C.badTint, C.bad, C.bad],
+};
+export const Chip: React.FC<{x: number; y: number; tone: ChipTone; size?: number; style?: React.CSSProperties; children: React.ReactNode}> = ({x, y, tone, size = 22, style, children}) => (
+  <div style={{position: 'absolute', left: x, top: y, transform: 'translate(-50%, -50%)', whiteSpace: 'nowrap', fontFamily: MONO, fontSize: size, fontWeight: 600, padding: '6px 14px', borderRadius: 999, background: CHIP[tone][0], color: CHIP[tone][1], border: `2px solid ${CHIP[tone][2]}`, ...style}}>
     {children}
   </div>
 );
 
-export const Code: React.FC<Kids & {size?: number}> = ({size = 21, children}) => (
-  <span style={{fontFamily: MONO, fontSize: size, background: '#f2f3f3', borderRadius: 6, padding: '3px 10px', whiteSpace: 'nowrap'}}>{children}</span>
+export const Dot: React.FC<{x: number; y: number; c: string; r?: number; o?: number}> = ({x, y, c, r = 10, o = 1}) => (
+  <div style={{position: 'absolute', left: x - r, top: y - r, width: r * 2, height: r * 2, borderRadius: r, background: c, opacity: o, boxShadow: `0 0 ${r * 1.6}px ${c}`}} />
 );
 
-const TIER: Record<string, [string, string, string]> = {
-  C1: ['#eff6ff', '#1e40af', 'Internal'],
-  C2: ['#fffbeb', '#92400e', 'Confidential'],
-  C3: ['#fef2f2', '#991b1b', 'Secret'],
+export const Ring: React.FC<{x: number; y: number; f: number; at: number; c: string; size?: number}> = ({x, y, f, at, c, size = 140}) => {
+  if (f < at || f > at + 20) return null;
+  const r = tw(f, at, at + 20);
+  return <div style={{position: 'absolute', left: x - size / 2, top: y - size / 2, width: size, height: size, borderRadius: size, border: `4px solid ${c}`, opacity: 1 - r, transform: `scale(${0.3 + r * 1.1})`}} />;
 };
-export const TierBadge: React.FC<{tier: string; size?: number}> = ({tier, size = 24}) => (
-  <span style={{background: TIER[tier][0], color: TIER[tier][1], fontWeight: 700, fontSize: size, padding: '5px 14px', borderRadius: 8, whiteSpace: 'nowrap'}}>
-    {tier} · {TIER[tier][2]}
-  </span>
+
+// Line-art icons for the dashboard's rail and cards.
+const P: Record<string, React.ReactNode> = {
+  grid: <><rect x="4" y="4" width="7" height="7" rx="1.5" /><rect x="13" y="4" width="7" height="7" rx="1.5" /><rect x="4" y="13" width="7" height="7" rx="1.5" /><rect x="13" y="13" width="7" height="7" rx="1.5" /></>,
+  shield: <path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6z" />,
+  gauge: <><path d="M4 17a8 8 0 1 1 16 0" /><path d="m12 17 4-5" /></>,
+  laptop: <><rect x="5" y="5" width="14" height="10" rx="1.5" /><path d="M3 19h18" /></>,
+  file: <><path d="M6 3h8l4 4v14H6z" /><path d="M14 3v4h4M9 12h6M9 16h6" /></>,
+  list: <><path d="M9 6h11M9 12h11M9 18h11" /><circle cx="4.5" cy="6" r="1" /><circle cx="4.5" cy="12" r="1" /><circle cx="4.5" cy="18" r="1" /></>,
+  doc: <><path d="M6 3h8l4 4v14H6z" /><path d="M14 3v4h4" /></>,
+  mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m4 7 8 6 8-6" /></>,
+  server: <><rect x="4" y="4" width="16" height="7" rx="1.5" /><rect x="4" y="13" width="16" height="7" rx="1.5" /><path d="M8 7.5h.01M8 16.5h.01" /></>,
+  download: <><path d="M6 3h8l4 4v14H6z" /><path d="M12 10v7M9 14l3 3 3-3" /></>,
+};
+export const Icon: React.FC<{name: keyof typeof P; size?: number; color?: string; stroke?: number}> = ({name, size = 28, color = C.sub, stroke = 1.8}) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" style={{display: 'block'}}>
+    {P[name]}
+  </svg>
 );
 
-export const Meter: React.FC<{used: number; limit: number}> = ({used, limit}) => {
-  const pct = Math.min(100, (used / limit) * 100);
-  const color = pct >= 100 ? C.bad : pct >= 80 ? C.orange : C.link;
-  return (
-    <div>
-      <div style={{display: 'flex', justifyContent: 'space-between', fontSize: 20, color: C.sub, marginBottom: 8, fontVariantNumeric: 'tabular-nums'}}>
-        <span>{Math.round(used).toLocaleString('en-US')} / {limit.toLocaleString('en-US')}</span>
-        <span>{pct.toFixed(0)}%</span>
-      </div>
-      <div style={{height: 12, borderRadius: 6, background: C.line}}>
-        <div style={{height: 12, borderRadius: 6, background: color, width: `${pct}%`}} />
-      </div>
-    </div>
-  );
-};
-
-export type ChipKind = 'secret' | 'masked' | 'plain';
-const CHIP: Record<ChipKind, [string, string, string]> = {
-  secret: [C.bad, '#ffffff', C.bad],
-  masked: [C.warnBg, C.warnInk, C.orange],
-  plain: ['#10263a', '#a9d4f5', C.link],
-};
-// A piece of data in flight. Absolutely positioned by its center unless `inline`.
-export const Chip: React.FC<Kids & {kind: ChipKind; x?: number; y?: number; inline?: boolean; style?: React.CSSProperties}> = ({kind, x = 0, y = 0, inline, style, children}) => (
-  <div
-    style={{
-      ...(inline ? {display: 'inline-block'} : {position: 'absolute', left: x, top: y, transform: 'translate(-50%, -50%)'}),
-      whiteSpace: 'nowrap', fontFamily: MONO, fontSize: 22, fontWeight: 600, padding: '7px 16px', borderRadius: 999,
-      background: CHIP[kind][0], color: CHIP[kind][1], border: `2px solid ${CHIP[kind][2]}`, ...style,
-    }}
-  >
-    {children}
+export const Toggle: React.FC<{on: number}> = ({on}) => (
+  <div style={{width: 66, height: 36, borderRadius: 18, background: interpolateColors(on, [0, 1], ['#D3DBE6', C.gs]), position: 'relative', flex: 'none'}}>
+    <div style={{position: 'absolute', top: 4, left: 4 + on * 30, width: 28, height: 28, borderRadius: 14, background: '#FFFFFF', boxShadow: '0 1px 3px rgba(12,26,43,.3)'}} />
   </div>
 );
 
-/* ---------- Network-shot icons ---------- */
-
-export const AgentNode: React.FC<{x: number; y: number; size?: number; ring?: string; style?: React.CSSProperties}> = ({x, y, size = 92, ring = C.nightLine, style}) => (
-  <div style={{position: 'absolute', left: x - size / 2, top: y - size / 2, width: size, height: size, borderRadius: size * 0.22, background: C.nightNode, border: `2px solid ${ring}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: size * 0.32, fontWeight: 600, color: '#c8d3e0', ...style}}>
-    &gt;_
-  </div>
-);
-
-export const Cloud: React.FC<{x: number; y: number; w: number; h: number; stroke?: string; glow?: number}> = ({x, y, w, h, stroke = C.nightLine, glow = 0}) => (
-  <svg viewBox="0 0 340 170" width={w} height={h} style={{position: 'absolute', left: x, top: y, overflow: 'visible', filter: glow ? `drop-shadow(0 0 ${8 + glow * 30}px ${stroke})` : undefined}}>
-    <path d="M78 150 A42 42 0 0 1 66 68 A58 58 0 0 1 160 36 A66 66 0 0 1 270 62 A44 44 0 0 1 282 150 Z" fill={C.nightNode} stroke={stroke} strokeWidth={3} strokeLinejoin="round" />
-  </svg>
-);
-
-export const Laptop: React.FC<{x: number; y: number; ring?: string}> = ({x, y, ring = C.nightLine}) => (
-  <svg viewBox="0 0 150 104" width={150} height={104} style={{position: 'absolute', left: x - 75, top: y - 52, overflow: 'visible'}}>
-    <rect x={18} y={4} width={114} height={76} rx={8} fill={C.nightNode} stroke={ring} strokeWidth={3} />
-    <path d="M4 88 H146 L138 100 H12 Z" fill={C.nightNode} stroke={ring} strokeWidth={3} strokeLinejoin="round" />
-  </svg>
-);
-
-export const Server: React.FC<{x: number; y: number; ring?: string}> = ({x, y, ring = C.nightLine}) => (
-  <svg viewBox="0 0 160 150" width={160} height={150} style={{position: 'absolute', left: x - 80, top: y - 75, overflow: 'visible'}}>
-    {[0, 50, 100].map((t) => (
-      <g key={t}>
-        <rect x={6} y={t + 4} width={148} height={42} rx={7} fill={C.nightNode} stroke={ring} strokeWidth={3} />
-        <circle cx={28} cy={t + 25} r={5} fill={ring} />
-      </g>
-    ))}
-  </svg>
-);
-
-export const Gate: React.FC<{x: number; y: number; w: number; h: number; at: number; flash?: number}> = ({x, y, w, h, at, flash = 0}) => {
-  const p = sp(useCurrentFrame(), at, {damping: 14, stiffness: 120});
-  return (
-    <div style={{position: 'absolute', left: x, top: y, width: w, height: h, borderRadius: 22, background: C.nav, border: `3px solid ${C.orange}`, boxShadow: `0 0 ${30 + flash * 60}px rgba(255,153,0,${0.25 + flash * 0.45})`, transform: `scaleY(${p})`, opacity: Math.min(1, p * 2), display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
-      <ShieldIcon size={Math.min(96, w * 0.62)} />
-    </div>
-  );
+export const Pill: React.FC<{tone: 'ok' | 'bad' | 'warn' | 'gs'; size?: number; children: React.ReactNode; style?: React.CSSProperties}> = ({tone, size = 20, children, style}) => {
+  const m = {ok: [C.okTint, C.ok], bad: [C.badTint, C.bad], warn: [C.warnTint, C.warn], gs: [C.gsTint, C.gsDeep]}[tone];
+  return <span style={{display: 'inline-flex', alignItems: 'center', gap: 8, padding: '5px 14px', borderRadius: 999, background: m[0], color: m[1], fontSize: size, fontWeight: 700, whiteSpace: 'nowrap', ...style}}>{children}</span>;
 };
 
 export const Cursor: React.FC<{x: number; y: number; press?: number}> = ({x, y, press = 0}) => (
-  <svg viewBox="0 0 24 24" width={48} height={48} style={{position: 'absolute', left: x - 6, top: y - 3, transform: `scale(${1 - press * 0.15})`, filter: 'drop-shadow(0 3px 6px rgba(0,0,0,.35))'}}>
-    <path d="M4 2 L4 19 L8.5 15 L11.5 22 L14.5 20.7 L11.6 14 L18 14 Z" fill="#ffffff" stroke="#16191f" strokeWidth={1.4} strokeLinejoin="round" />
+  <svg viewBox="0 0 24 24" width={46} height={46} style={{position: 'absolute', left: x - 6, top: y - 3, transform: `scale(${1 - press * 0.15})`, filter: 'drop-shadow(0 3px 6px rgba(0,0,0,.3))'}}>
+    <path d="M4 2 L4 19 L8.5 15 L11.5 22 L14.5 20.7 L11.6 14 L18 14 Z" fill="#FFFFFF" stroke={C.ink} strokeWidth={1.4} strokeLinejoin="round" />
   </svg>
 );
-
-export const Wordmark: React.FC<{at: number; scale?: number; sub?: boolean}> = ({at, scale = 1, sub = true}) => {
-  const f = useCurrentFrame();
-  const s = sp(f, at, {damping: 10, stiffness: 150, mass: 0.8});
-  const slide = tw(f, at + 22, at + 40, 1, 0, easeInOut);
-  const textP = tw(f, at + 26, at + 44);
-  return (
-    <div style={{position: 'relative', display: 'flex', alignItems: 'center', gap: 46 * scale}}>
-      {[0, 10].map((d) => {
-        const r = tw(f, at + 8 + d, at + 40 + d, 0, 1, Easing.out(Easing.quad));
-        return <div key={d} style={{position: 'absolute', left: 100 * scale + slide * 395 * scale - 90 * scale, top: '50%', width: 180 * scale, height: 180 * scale, marginTop: -90 * scale, borderRadius: '50%', border: `${3 * scale}px solid ${C.orange}`, opacity: (1 - r) * 0.7 * (f >= at + 8 + d ? 1 : 0), transform: `scale(${0.6 + r * 2.4})`}} />;
-      })}
-      <div style={{transform: `translateX(${slide * 395 * scale}px) scale(${s})`}}><ShieldIcon size={200 * scale} /></div>
-      <div style={{opacity: textP, transform: `translateX(${(1 - textP) * -40}px)`}}>
-        <div style={{fontSize: 150 * scale, fontWeight: 800, letterSpacing: '-0.035em', color: '#ffffff', lineHeight: 1}}>HushGate</div>
-        {sub && <div style={{fontSize: 46 * scale, color: '#9ca3af', marginTop: 10 * scale, opacity: tw(f, at + 40, at + 54)}}>AI Control Layer</div>}
-      </div>
-    </div>
-  );
-};
