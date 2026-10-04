@@ -4,8 +4,8 @@ The self-testing suite has three layers, each runnable with one command:
 
 | Layer | What it proves | Command | Result |
 |---|---|---|---|
-| **65 automated tests** (Go) | Every control's allowed and blocked cases, false positives, and regressions found while testing with real Claude Code | `just tests` (Docker only) or `just tests-local` (race detector) | all pass |
-| **17 end-to-end checks** | The running system: real containers, the simulated company network, live policy edits, metrics and exports | `just corp-up`, then `just e2e` | 17 / 17 pass |
+| **74 automated tests** (Go) | Every control's allowed and blocked cases, false positives, and regressions found while testing with real Claude Code | `just tests` (Docker only) or `just tests-local` (race detector) | all pass |
+| **19 end-to-end checks** | The running system: real containers, the simulated company network, live policy edits, metrics and exports | `just corp-up`, then `just e2e` | 19 / 19 pass |
 | **9 benchmarks** | The cost of every deterministic check, and of the whole gate | `just bench` | see [2-architecture/performance.md](../2-architecture/performance.md) |
 
 There are also **manual scenarios** for a live demo, and **rehearsed prompts for real Claude Code** in [DEMO.md](DEMO.md).
@@ -26,13 +26,15 @@ There are also **manual scenarios** for a live demo, and **rehearsed prompts for
 | 7b | Prompt injection | same report | AI warning, 98% (about 0.3 s after the read) |
 | 8 | Remote code execution | model pipes an installer into a shell | blocked by signature HG-RCE-001 |
 | 9 | Exfiltration by shell | `curl` sends the DB password | Bash guard treats it as a network tool; kill switch |
-| 10 | Broken policy edit | a typo is saved into `hushgate.yaml` | rejected ("field toolz not found"); previous policy stays active |
-| 11 | Live policy edit | `write_file: local → deny` | applied within a second; the next `write_file` is blocked |
-| 12 | Token budget | the laptop's budget is set to 1 | request refused: "token budget exhausted" |
-| 13 | Model allowlist | `models.allow` narrowed to `claude-opus-*` | `claude-haiku-4-5` refused |
-| 14 | Performance metrics | `/api/metrics/summary` | per-stage percentiles recorded (request checks p50 193 µs) |
-| 15 | Audit export | `/api/audit/export?format=csv&blocked=1` | CSV with every blocked and killed decision |
-| 16 | Prometheus | query `hushgate_tool_calls_total` | the scrape shows allow, block and kill counts |
+| 10 | Agent on OpenRouter | an OpenAI-SDK agent with the default OpenRouter URL writes a config | Chat Completions intercepted and inspected: placeholders sent, real value only in the local file |
+| 11 | OpenRouter agent hijacked | the poisoned report over Chat Completions | `send_email` with secrets killed |
+| 12 | Broken policy edit | a typo is saved into `hushgate.yaml` | rejected ("field toolz not found"); previous policy stays active |
+| 13 | Live policy edit | `write_file: local → deny` | applied within a second; the next `write_file` is blocked |
+| 14 | Token budget | the laptop's budget is set to 1 | request refused: "token budget exhausted" |
+| 15 | Model allowlist | `models.allow` narrowed to `claude-opus-*` | `claude-haiku-4-5` refused |
+| 16 | Performance metrics | `/api/metrics/summary` | per-stage percentiles recorded (request checks p50 193 µs) |
+| 17 | Audit export | `/api/audit/export?format=csv&blocked=1` | CSV with every blocked and killed decision |
+| 18 | Prometheus | query `hushgate_tool_calls_total` | the scrape shows allow, block and kill counts |
 
 Output of the last run:
 
@@ -47,15 +49,17 @@ PASS  7. Exfiltration of a secret by email: call dropped, agent halted (kill swi
 PASS  7b. Prompt injection in the poisoned report flagged by the AI advisor
 PASS  8. Installer piped into a shell blocked by attack signature HG-RCE-001
 PASS  9. curl sending the DB password: Bash guard treats it as a network call, kill switch
-PASS  10. Invalid policy edit rejected; previous policy stays active
-PASS  11. Policy edit applies live: write_file denied
-PASS  12. Per-agent token budget enforced (hard stop)
-PASS  13. Model allowlist enforced: a model outside it is refused
-PASS  14. Performance metrics recorded per stage
-PASS  15. Audit trail exports as CSV (blocked and killed only)
-PASS  16. Prometheus scrapes the gate's metrics
+PASS  10. Agent on OpenRouter (Chat Completions): secrets masked, real value restored locally
+PASS  11. Agent on OpenRouter hijacked by the poisoned report: email with secrets killed
+PASS  12. Invalid policy edit rejected; previous policy stays active
+PASS  13. Policy edit applies live: write_file denied
+PASS  14. Per-agent token budget enforced (hard stop)
+PASS  15. Model allowlist enforced: a model outside it is refused
+PASS  16. Performance metrics recorded per stage
+PASS  17. Audit trail exports as CSV (blocked and killed only)
+PASS  18. Prometheus scrapes the gate's metrics
 
-17 passed, 0 failed, 0 skipped
+19 passed, 0 failed, 0 skipped
 ```
 
 Check 7b needs `TYPESAFE_API_KEY` in `.env`. Without it, the check is reported as skipped, and everything else still passes.
@@ -102,6 +106,19 @@ Run in Docker with no Go install: `docker run --rm -v "$PWD":/src -w /src/5-impl
 | `signature.TestLaterFeedOverridesID` | A later feed overrides an earlier one by signature id |
 | `signature.TestFlatten` | Tool arguments are flattened to text the signatures can match |
 
+### OpenAI-compatible Chat Completions (OpenAI, OpenRouter)
+| Test | Proves |
+|---|---|
+| `gateway.TestChatLocalToolRehydrated` | Over Chat Completions the provider only sees placeholders, a local tool gets the real value reassembled from streamed fragments, and keep-alive comments and `[DONE]` pass through |
+| `gateway.TestChatExfiltrationKills` | A secret in a network tool: the call is removed from the stream, a note replaces it, `finish_reason` becomes `stop`, the agent is halted and later requests get an OpenAI-format 403 |
+| `gateway.TestChatParallelCalls` | Interleaved parallel calls are decided one by one: the local one is restored, the exfiltration is killed |
+| `gateway.TestChatCallsWithoutIndex` | Providers that send whole calls without an index are still decided per call |
+| `gateway.TestChatUsageCountedAndRequested` | The gate turns on usage reporting even if the agent switched it off, and counts the tokens against the budget |
+| `gateway.TestChatNonStreaming` | Non-streamed answers: allowed calls restored, blocked ones replaced by a note, usage counted |
+| `gateway.TestChatToolsAndResultsQueued` | Unknown function tools go to review; `role: tool` results go to the injection scan |
+| `gateway.TestChatModelAllowlist` | OpenRouter-style model ids (`anthropic/claude-haiku-4.5`) match `*/claude-*`; others are refused |
+| `gateway.TestChatSignatureBlocksPipeToShell` | Attack signatures and the Bash guard apply to Chat Completions tool calls too |
+
 ### Company network (forward proxy, LLM detection)
 | Test | Proves |
 |---|---|
@@ -146,9 +163,9 @@ Run in Docker with no Go install: `docker run --rm -v "$PWD":/src -w /src/5-impl
 
 Every scenario is one command. They are also listed in [RUN.md](../5-implementation/RUN.md).
 
-**Company network** (`just corp-up`): `just web`, `just agent`, `just vps`, `just direct`, `just guest`, `just slack`, `just attack`, `just install`, `just upload`, plus `just corp-reset`.
+**Company network** (`just corp-up`): `just web`, `just agent`, `just vps`, `just direct`, `just guest`, `just slack`, `just attack`, `just install`, `just upload`, `just openrouter` (add `task=attack`), plus `just corp-reset`.
 
-**Gateway mode** (`just gateway-offline`): `just gw-config`, `just gw-forbidden`, `just gw-slack`, `just gw-attack`, `just gw-install`, `just gw-upload`, `just gw-egress`, plus `just gw-reset`.
+**Gateway mode** (`just gateway-offline`): `just gw-config`, `just gw-forbidden`, `just gw-slack`, `just gw-attack`, `just gw-install`, `just gw-upload`, `just gw-egress`, `just gw-openrouter` (add `task=attack`), plus `just gw-reset`.
 
 **Real Claude Code** (`just gateway-up`, then `just claude-sandbox`): prompts rehearsed against a real model are in [DEMO.md](DEMO.md). They cover masking, the attack signatures, the Bash guard and live policy edits, and `just claude-sandbox-check` shows the container has no route out except the gate.
 

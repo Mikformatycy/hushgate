@@ -118,6 +118,13 @@ Send a password out with curl (the agent is stopped):
 just upload
 ```
 
+Run an agent on OpenRouter (OpenAI-compatible Chat Completions): same masking and checks, add `task=attack` for the exfiltration attempt:
+
+```sh
+just openrouter
+just openrouter task=attack
+```
+
 Run the first four in one go:
 
 ```sh
@@ -168,6 +175,14 @@ Use a tool nobody approved yet (blocked, sent for review):
 
 ```sh
 just gw-slack
+```
+
+Run the same agent over OpenAI-compatible Chat Completions (the OpenRouter format):
+
+```sh
+just gw-openrouter
+just gw-openrouter task=attack
+# without just: docker compose exec agent python agent_openai.py "<task>"
 ```
 
 Reach the internet directly from the agent (fails):

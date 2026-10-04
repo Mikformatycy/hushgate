@@ -24,7 +24,7 @@ flowchart LR
 
   subgraph Gate["HushGate gate (Go, one binary)"]
     direction TB
-    IN[Gateway :8080<br/>Anthropic Messages API]
+    IN[Gateway :8080<br/>Anthropic Messages +<br/>OpenAI Chat Completions]
     FWD[TLS-inspecting forward proxy :3128<br/>device allowlist, LLM traffic detection]
     V[Vault<br/>tiers C0–C3, detectors, placeholders]
     P[Tool policy<br/>local / network / deny, block / kill]
@@ -132,7 +132,7 @@ All three modes run in this repository: `docker-compose.yml` (gateway mode, the 
 |---|---|---|
 | Gate | Go 1.26, a single static binary | Gateway and forward proxy; vault, policy, signatures, Bash guard, budgets; admin API; metrics |
 | Vault | Go (`internal/vault`) | Classifies `.env` values into tiers with reasons; detects secrets and checksum-validated personal data in any text; replaces them with stable placeholders; restores them into local tools |
-| Stream inspector | Go (`internal/gateway/stream.go`) | Passes server-sent events through as they arrive, holding each `tool_use` block until it is complete, then checking it |
+| Stream inspectors | Go (`internal/gateway/stream.go`, `openai.go`) | Pass server-sent events through as they arrive. Anthropic `tool_use` blocks and OpenAI `tool_calls` fragments are held until each call is complete, then checked; a blocked call becomes a text note and the stream stays well-formed |
 | Forward proxy | Go (`internal/forward`) | `CONNECT` with TLS interception using the company CA; device identity from proxy credentials; LLM traffic recognised by shape (`internal/detect`) |
 | Live config | Go (`internal/config`) | Polls the policy file, validates, diffs, applies atomically; writes review decisions back with comments kept |
 | State | Redis 7 | Token usage and kill state per agent, shared by all gate replicas |

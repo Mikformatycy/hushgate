@@ -11,7 +11,7 @@
 | [**1 · Solution**](1-solution/) | The approach, 20 controls and guardrails (each with the tests that prove it), a configuration reference, and strict and relaxed example policies | Robustness of the solution and quality of guardrails |
 | [**2 · Architecture**](2-architecture/) | Architecture diagram, request flow, deployment modes, and [performance](2-architecture/performance.md) of deterministic and AI enforcement | Architecture and performance efficiency |
 | [**3 · Reporting**](3-reporting/) | Dashboard screenshots, Prometheus metrics, the audit trail and its exports, example alert rules | Security reporting |
-| [**4 · Testing**](4-testing/) | 65 automated tests, 17 end-to-end checks, 9 benchmarks, manual scenarios and a live demo script | Completeness of the self-testing suite |
+| [**4 · Testing**](4-testing/) | 74 automated tests, 19 end-to-end checks, 9 benchmarks, manual scenarios and a live demo script | Completeness of the self-testing suite |
 | [**5 · Implementation**](5-implementation/) | The code, implementation notes, and deployment into existing agent ecosystems | Practical implementability and scalability |
 
 ## In numbers
@@ -20,7 +20,8 @@
 - **≈ 0.1–0.2 ms** added by the gate per request (benchmark: 144 µs through the gate versus 30 µs direct; live demo p50: 174 µs). AI checks run off the request path and add nothing.
 - **19** attack signatures from a central feed. **9** secret formats and **4** checksum-validated personal-data formats (IBAN, card, PESEL, NIP).
 - **1 s** from saving the policy file to enforcing it. Invalid edits are rejected and the previous policy stays active.
-- **17 / 17** end-to-end checks and **65** automated tests pass.
+- **2** API formats inspected end to end: Anthropic Messages (Claude Code, Anthropic SDKs) and OpenAI-compatible Chat Completions (OpenAI, OpenRouter and most hosted models).
+- **19 / 19** end-to-end checks and **74** automated tests pass.
 
 ## Quick start
 
