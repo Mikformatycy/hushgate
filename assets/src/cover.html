@@ -1,0 +1,83 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=JetBrains+Mono:wght@600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#111B27;--text:#E6EAF0;--sub:#8C98A8;--brick:#283850;--red:#CF5F57;--redt:#F0A39D;--blue:#7297C5;--bluet:#CAD9EC}
+*{box-sizing:border-box}
+body{margin:0;font-family:Manrope,Helvetica,Arial,sans-serif;color:var(--text)}
+#c{position:relative;width:1600px;height:1600px;overflow:hidden;background:var(--bg)}
+.abs{position:absolute}
+.lock{left:110px;top:110px;display:flex;align-items:center;gap:26px}
+.lock svg{width:86px;height:97px}
+.word{font-size:92px;font-weight:800;letter-spacing:-3px;line-height:1}
+.word span{color:var(--blue)}
+.tag{left:110px;top:262px;font-size:48px;font-weight:700;line-height:1.2;letter-spacing:-.8px}
+.tag span{color:var(--sub)}
+.col{top:478px;font-size:22px;font-weight:700;letter-spacing:4px;text-transform:uppercase;color:var(--sub)}
+.sec{left:110px;font-size:20px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--sub)}
+.wall{left:725px;width:150px;top:540px;height:650px;overflow:hidden}
+.brick{position:absolute;height:24px;background:var(--brick);border-radius:3px}
+.row{position:absolute;left:110px;width:1380px;height:50px;display:flex;align-items:center}
+.side{width:615px;display:flex;align-items:center;height:100%}
+.slot{width:150px;height:3px}
+.ln{flex:1;height:3px;position:relative}
+.chip{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:23px;border-radius:999px;padding:9px 18px;white-space:nowrap;border:2px solid}
+.r{color:var(--redt);border-color:var(--red);background:rgba(207,95,87,.12)}
+.b{color:var(--bluet);border-color:var(--blue);background:rgba(114,151,197,.12)}
+.lr{background:var(--red)} .lb{background:var(--blue)}
+.ar::after,.al::before{content:"";position:absolute;top:-8px;border:9.5px solid transparent}
+.ar::after{right:6px;border-left:14px solid var(--blue);border-right:0}
+.al::before{left:6px;border-right:14px solid var(--red);border-left:0}
+.ln.lr.al,.ln.lb.ar{margin:0}
+.side.l .chip{margin-right:0}
+.gap-l{margin-right:18px}.gap-r{margin-left:18px}
+.legend{left:110px;top:1290px;display:flex;gap:40px;font-size:24px;font-weight:600;color:var(--sub)}
+.legend i{display:inline-block;width:16px;height:16px;border-radius:50%;margin-right:12px;vertical-align:-1px}
+.foot{left:110px;top:1458px;font-size:24px;color:var(--sub);font-weight:600}
+</style></head><body><div id="c">
+<div class="abs lock">
+  <svg viewBox="0 0 64 72"><defs><linearGradient id="g" x1="0" y1="0" x2="0.35" y2="1"><stop offset="0" stop-color="#9BB9E0"/><stop offset="1" stop-color="#5C84B8"/></linearGradient></defs>
+  <path d="M32 3 L58 12 V34 C58 52 46.5 64 32 69.5 C17.5 64 6 52 6 34 V12 Z" fill="url(#g)"/>
+  <rect x="15" y="29" width="34" height="13" rx="6.5" fill="#fff"/><circle cx="24" cy="35.5" r="2.6" fill="#111B27"/><circle cx="32" cy="35.5" r="2.6" fill="#111B27"/><circle cx="40" cy="35.5" r="2.6" fill="#111B27"/></svg>
+  <div class="word">Hush<span>Gate</span></div>
+</div>
+<div class="abs tag">Agents use your secrets.<br><span>The model never sees them.</span></div>
+
+<div class="abs col" style="left:110px">Your agent</div>
+<div class="abs col" style="left:725px;width:150px;text-align:center">Proxy</div>
+<div class="abs col" style="right:110px;text-align:right">The model</div>
+<div class="abs wall" id="wall"></div>
+<div class="abs sec" style="top:566px">Request →</div>
+<div class="abs sec" style="top:926px">← Response</div>
+<div id="rows"></div>
+<svg class="abs" viewBox="-6 -6 76 84" style="left:742px;top:858px;width:116px;height:128px"><defs><linearGradient id="g3" x1="0" y1="0" x2="0.35" y2="1"><stop offset="0" stop-color="#9BB9E0"/><stop offset="1" stop-color="#5C84B8"/></linearGradient></defs>
+  <path d="M32 3 L58 12 V34 C58 52 46.5 64 32 69.5 C17.5 64 6 52 6 34 V12 Z" fill="#111B27" stroke="#111B27" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M32 3 L58 12 V34 C58 52 46.5 64 32 69.5 C17.5 64 6 52 6 34 V12 Z" fill="url(#g3)"/>
+  <rect x="15" y="29" width="34" height="13" rx="6.5" fill="#fff"/><circle cx="24" cy="35.5" r="2.6" fill="#111B27"/><circle cx="32" cy="35.5" r="2.6" fill="#111B27"/><circle cx="40" cy="35.5" r="2.6" fill="#111B27"/></svg>
+
+<div class="abs legend"><span><i style="background:var(--red)"></i>Real value</span><span><i style="background:var(--blue)"></i>Placeholder</span></div>
+<div class="abs foot">HackYeah 2026 · Team Mikformatyka · github.com/Mikformatycy/hushgate</div>
+</div>
+<script>
+const WALL_TOP=540, rows=[
+  {y:655, dir:'out', real:'Pr0d-Adm1n-2026', ph:'{{VAULT_ENV_DB_PASSWORD}}'},
+  {y:745, dir:'out', real:'PL61 1090 1014 0000 0712 1981 2874', ph:'{{VAULT_IBAN_7F3A91C2}}'},
+  {y:835, dir:'out', real:'44051401359', ph:'{{VAULT_PESEL_9F2C41A0}}'},
+  {y:1015,dir:'in',  real:'Pr0d-Adm1n-2026', ph:'{{VAULT_ENV_DB_PASSWORD}}'},
+  {y:1105,dir:'in',  real:'44051401359', ph:'{{VAULT_PESEL_9F2C41A0}}'},
+];
+const R=document.getElementById('rows');
+for(const r of rows){
+  const out=r.dir==='out';
+  R.insertAdjacentHTML('beforeend',`<div class="row" style="top:${r.y-25}px">
+    <div class="side l"><span class="chip r gap-l">${r.real}</span><div class="ln lr ${out?'':'al'}"></div></div>
+    <div class="slot" style="background:linear-gradient(90deg,var(--red),var(--blue))"></div>
+    <div class="side"><div class="ln lb ${out?'ar':''}"></div><span class="chip b gap-r">${r.ph}</span></div></div>`);
+}
+// a solid brick wall with a thin slit where each row passes through
+const W=document.getElementById('wall'), H=650, PITCH=30, BW=64;
+for(let y=0,i=0;y<H;y+=PITCH,i++)
+  for(let x=(i%2?-BW/2:0)-3;x<150;x+=BW+6)
+    W.insertAdjacentHTML('beforeend',`<div class="brick" style="top:${y}px;left:${x}px;width:${BW}px"></div>`);
+for(const r of rows)
+  W.insertAdjacentHTML('beforeend',`<div style="position:absolute;left:0;right:0;top:${r.y-WALL_TOP-8}px;height:16px;background:var(--bg)"></div>`);
+</script></body></html>
