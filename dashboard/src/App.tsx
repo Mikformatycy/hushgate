@@ -37,46 +37,51 @@ export default function App() {
 
   return (
     <div className="min-h-screen">
-      <header className="flex h-10 items-center gap-3 bg-nav px-4 text-white">
-        <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden>
-          <path fill="#ff9900" d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3z" />
+      <header className="flex h-16 items-center gap-3 border-b border-line bg-white px-6">
+        <svg viewBox="0 0 24 24" className="h-7 w-7" aria-hidden>
+          <path className="fill-gs" d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3z" />
         </svg>
-        <span className="font-bold">HushGate</span>
-        <span className="text-gray-400">AI Control Layer</span>
-        <span className="ml-auto flex items-center gap-2 text-xs text-gray-300">
+        <span className="text-lg font-extrabold tracking-tight">HushGate</span>
+        <span className="text-sub">AI Control Layer</span>
+        <span
+          className={`ml-auto flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold ${
+            error ? 'bg-bad-tint text-bad' : 'bg-ok-tint text-ok'
+          }`}
+        >
           <span className={`h-2 w-2 rounded-full ${error ? 'bg-bad' : 'bg-ok animate-pulse'}`} />
           {error ? 'Gate unreachable' : 'Live'}
         </span>
       </header>
 
       <div className="flex">
-        <nav className="min-h-[calc(100vh-2.5rem)] w-52 shrink-0 border-r border-gray-200 bg-white py-4">
-          <p className="px-5 pb-2 text-xs font-bold tracking-wide text-gray-500 uppercase">Monitoring</p>
+        <nav className="min-h-[calc(100vh-4rem)] w-60 shrink-0 border-r border-line bg-white px-3 py-5">
+          <p className="px-3 pb-2 text-xs font-bold tracking-wider text-sub uppercase">Monitoring</p>
           {pages.map((p) => (
             <button
               key={p}
               onClick={() => setPage(p)}
-              className={`flex w-full items-center justify-between px-5 py-1.5 text-left hover:text-link ${
-                page === p ? 'border-l-4 border-link pl-4 font-bold text-link' : 'text-gray-700'
+              className={`mb-0.5 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left ${
+                page === p ? 'bg-gs-tint font-bold text-gs-deep' : 'text-sub hover:bg-page hover:text-ink'
               }`}
             >
-              {p}
+              <NavIcon page={p} />
+              <span className="flex-1">{p}</span>
               {p === 'Review' && pending > 0 && (
-                <span className="rounded-full bg-link px-2 text-xs font-bold text-white">{pending}</span>
+                <span className="rounded-full bg-gs px-2 text-xs font-bold text-white">{pending}</span>
               )}
             </button>
           ))}
         </nav>
 
-        <main className="min-w-0 flex-1 p-6">
+        <main className="min-w-0 flex-1 p-8">
           {warnings.map((w) => (
-            <div key={w.id} className="mb-3 flex items-start gap-3 rounded-lg border-2 border-warn bg-[#fff8e6] px-4 py-3">
-              <span className="text-lg leading-5 text-[#8d6605]">⚠</span>
+            <div key={w.id} className="mb-3 flex items-start gap-3 rounded-2xl border border-warn/40 bg-warn-tint px-5 py-4">
+              <span className="text-lg leading-5 text-warn">⚠</span>
               <div className="flex-1">
                 <p className="font-bold">
                   Prompt injection in <Mono>{w.tool}</Mono>
                 </p>
-                <p className="text-sm text-gray-700">
+                <p className="text-sm text-sub">
                   Read by agent "{w.agent}": {w.reason}. The agent is the target of this attack, not its source. This
                   warning blocks nothing; the policy still decides every action.
                 </p>
@@ -91,7 +96,7 @@ export default function App() {
             </div>
           ))}
           {kills.map((k) => (
-            <div key={k.id} className="kill-flash mb-3 flex items-start gap-3 rounded-lg bg-bad px-4 py-3 text-white">
+            <div key={k.id} className="kill-flash mb-3 flex items-start gap-3 rounded-2xl bg-bad px-5 py-4 text-white">
               <span className="text-lg leading-5">⊗</span>
               <div className="flex-1">
                 <p className="font-bold">
@@ -112,7 +117,7 @@ export default function App() {
             </div>
           ))}
           {config?.policy_file.error && (
-            <div className="mb-3 flex items-start gap-3 rounded-lg bg-bad px-4 py-3 text-white">
+            <div className="mb-3 flex items-start gap-3 rounded-2xl bg-bad px-5 py-4 text-white">
               <span className="text-lg leading-5">⊗</span>
               <div>
                 <p className="font-bold">
@@ -125,15 +130,15 @@ export default function App() {
             </div>
           )}
           {error && (
-            <div className="mb-3 rounded-lg border-l-4 border-bad bg-white px-4 py-3">
-              <b>Cannot reach the gate admin API.</b> <span className="text-gray-600">{error}</span>
+            <div className="mb-3 rounded-2xl border border-bad/40 bg-bad-tint px-5 py-4">
+              <b>Cannot reach the gate admin API.</b> <span className="text-sub">{error}</span>
             </div>
           )}
 
-          <p className="mb-1 text-sm text-gray-500">
-            HushGate <span className="mx-1">›</span> <span className="text-gray-800">{page}</span>
+          <p className="mb-1 text-sm text-sub">
+            HushGate <span className="mx-1">/</span> <span className="text-ink">{page}</span>
           </p>
-          <h1 className="mb-5 text-2xl font-bold">{page}</h1>
+          <h1 className="mb-6 text-3xl font-extrabold tracking-tight">{page}</h1>
 
           {page === 'Dashboard' && <Dashboard events={events} agents={agents} perf={perf} onReset={refreshAgents} />}
           {page === 'Agents' && <Agents agents={agents} onReset={refreshAgents} />}
@@ -177,7 +182,7 @@ function Dashboard({
 
   return (
     <>
-      <div className="mb-5 grid grid-cols-2 gap-5 lg:grid-cols-3">
+      <div className="mb-6 grid grid-cols-2 gap-5 lg:grid-cols-3">
         <Metric label="Agents" value={agents.length}>
           <Status tone="ok">{agents.length - halted} running</Status>
           {halted > 0 && <Status tone="bad">{halted} halted</Status>}
@@ -267,9 +272,9 @@ function Performance({ perf }: { perf: MetricsSummary | null }) {
 
 function Metric({ label, value, children }: { label: string; value: number | string; children: ReactNode }) {
   return (
-    <div className="rounded-lg bg-white p-5 shadow-[0_1px_1px_rgba(0,28,36,.3),1px_1px_1px_rgba(0,28,36,.15)]">
-      <p className="text-sm text-gray-600">{label}</p>
-      <p className="my-1 text-4xl font-light text-link">{value}</p>
+    <div className="rounded-2xl border border-line bg-white p-6">
+      <p className="text-sm font-semibold text-sub">{label}</p>
+      <p className="my-1.5 text-4xl font-extrabold tracking-tight text-ink">{value}</p>
       <div className="flex flex-col gap-0.5 text-xs">{children}</div>
     </div>
   )
@@ -290,7 +295,7 @@ function Agents({ agents, onReset }: { agents: Agent[]; onReset: () => void }) {
     <Panel title={`Agents (${agents.length})`}>
       <Table head={['Agent ID', 'Status', 'Token budget', 'Halt reason', 'Actions']} empty="No agents have called the gate yet.">
         {agents.map((a) => (
-          <tr key={a.id} className={a.killed ? 'bg-red-50' : ''}>
+          <tr key={a.id} className={a.killed ? 'bg-bad-tint/60' : ''}>
             <Td className="font-medium whitespace-nowrap">{a.id}</Td>
             <Td>{a.killed ? <Status tone="bad">Halted</Status> : <Status tone="ok">Running</Status>}</Td>
             <Td>
@@ -301,7 +306,7 @@ function Agents({ agents, onReset }: { agents: Agent[]; onReset: () => void }) {
               <button
                 disabled={busy === a.id}
                 onClick={() => reset(a.id)}
-                className="rounded-full border-2 border-link px-4 py-0.5 font-bold text-link hover:bg-blue-50 disabled:opacity-50"
+                className="rounded-full border border-gs-deep px-4 py-1 font-bold text-gs-deep hover:bg-gs-tint disabled:opacity-50"
               >
                 Reset
               </button>
@@ -349,9 +354,9 @@ function AuditLog({ events }: { events: GateEvent[] }) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Find by agent, tool or reason"
-            className="w-64 rounded border border-gray-400 px-2 py-1"
+            className="w-64 rounded-lg border border-line bg-white px-3 py-1.5"
           />
-          <select value={filter} onChange={(e) => setFilter(e.target.value)} className="rounded border border-gray-400 px-2 py-1">
+          <select value={filter} onChange={(e) => setFilter(e.target.value)} className="rounded-lg border border-line bg-white px-3 py-1.5">
             {Object.keys(filters).map((f) => (
               <option key={f}>{f}</option>
             ))}
@@ -360,7 +365,7 @@ function AuditLog({ events }: { events: GateEvent[] }) {
             <a
               key={fmt}
               href={`/api/audit/export?format=${fmt}&${filters[filter].query}${query ? `&q=${encodeURIComponent(query)}` : ''}`}
-              className="rounded-full border-2 border-link px-3 py-0.5 font-bold whitespace-nowrap text-link hover:bg-blue-50"
+              className="rounded-full border border-gs-deep px-3 py-1 font-bold whitespace-nowrap text-gs-deep hover:bg-gs-tint"
               title="Full audit trail from the gate's log file, with the current filter"
             >
               Export {fmt === 'csv' ? 'CSV' : 'JSON'}
@@ -378,7 +383,7 @@ function EventTable({ events, empty }: { events: GateEvent[]; empty: string }) {
   return (
     <Table head={['Time', 'Agent', 'Result', 'Details']} empty={empty}>
       {events.map((e) => (
-        <tr key={e.id} className={e.action === 'kill' ? 'bg-red-50' : ''}>
+        <tr key={e.id} className={e.action === 'kill' ? 'bg-bad-tint/60' : ''}>
           <Td className="font-mono text-xs whitespace-nowrap text-gray-600">{time(e.time)}</Td>
           <Td className="whitespace-nowrap">{e.agent}</Td>
           <Td>
@@ -486,7 +491,7 @@ function Nodes({ config, events }: { config: Config | null; events: GateEvent[] 
         </p>
         <Table head={['Device', 'Last attempt', 'Destination', 'Detected by']} empty="No unknown devices have tried to use an LLM.">
           {[...blocked.values()].reverse().map((e) => (
-            <tr key={e.agent} className="bg-red-50">
+            <tr key={e.agent} className="bg-bad-tint/60">
               <Td className="font-medium whitespace-nowrap">{e.agent.replace('unregistered: ', '')}</Td>
               <Td className="font-mono text-xs whitespace-nowrap text-gray-600">{time(e.time)}</Td>
               <Td>
@@ -506,7 +511,7 @@ function ReviewPage({ reviews, onDecided }: { reviews: Review[]; onDecided: () =
   const resolved = reviews.filter((r) => r.status !== 'pending').reverse()
   return (
     <>
-      <div className="mb-5 rounded-lg border-l-4 border-[#7d4dc0] bg-white px-5 py-3 text-gray-700 shadow-[0_1px_1px_rgba(0,28,36,.3)]">
+      <div className="mb-6 rounded-2xl border border-warn/30 bg-white px-6 py-4 text-sub">
         <b>AI suggests, a person decides, the rules enforce.</b> These are cases the deterministic rules could not settle:
         tools with no policy entry and variables no rule recognized. Until someone decides, the safe default applies. The
         AI advisor (TypeSafe Jev, a classifier with calibrated probabilities) never sees secret values, only tool
@@ -607,8 +612,8 @@ function ReviewCard({ r, onDecided }: { r: Review; onDecided: () => void }) {
         </p>
       </div>
 
-      <div className="rounded-lg border border-[#d9c8f0] bg-[#f8f4fd] p-3">
-        <p className="mb-1 text-xs font-bold tracking-wide text-[#5a2d91] uppercase">✦ AI suggestion</p>
+      <div className="rounded-xl border border-warn/25 bg-warn-tint p-3">
+        <p className="mb-1 text-xs font-bold tracking-wide text-warn uppercase">✦ AI suggestion</p>
         {r.suggestion ? (
           <>
             <p className="font-bold">{optionLabel[r.suggestion.value] ?? r.suggestion.value}</p>
@@ -621,7 +626,7 @@ function ReviewCard({ r, onDecided }: { r: Review; onDecided: () => void }) {
                     <span className="w-14 shrink-0 font-mono">{o}</span>
                     <div className="h-2 flex-1 rounded bg-white">
                       <div
-                        className={`h-2 rounded ${o === r.suggestion?.value ? 'bg-[#7d4dc0]' : 'bg-[#cdb8ea]'}`}
+                        className={`h-2 rounded ${o === r.suggestion?.value ? 'bg-warn' : 'bg-warn/30'}`}
                         style={{ width: `${p * 100}%` }}
                       />
                     </div>
@@ -646,7 +651,7 @@ function ReviewCard({ r, onDecided }: { r: Review; onDecided: () => void }) {
             setTouched(true)
             setValue(e.target.value)
           }}
-          className="rounded border border-gray-400 px-2 py-1"
+          className="rounded-lg border border-line bg-white px-3 py-1.5"
         >
           {r.options.map((o) => (
             <option key={o} value={o}>
@@ -658,14 +663,14 @@ function ReviewCard({ r, onDecided }: { r: Review; onDecided: () => void }) {
         <button
           disabled={busy}
           onClick={() => decide('apply')}
-          className="rounded-full bg-warn px-4 py-1 font-bold text-[#16191f] hover:brightness-95 disabled:opacity-50"
+          className="rounded-full bg-gs px-4 py-1 font-bold text-white hover:bg-gs-deep disabled:opacity-50"
         >
           Apply
         </button>
         <button
           disabled={busy}
           onClick={() => decide('dismiss')}
-          className="rounded-full border-2 border-link px-4 py-0.5 font-bold text-link hover:bg-blue-50 disabled:opacity-50"
+          className="rounded-full border border-gs-deep px-4 py-1 font-bold text-gs-deep hover:bg-gs-tint disabled:opacity-50"
         >
           Keep current rule
         </button>
@@ -873,5 +878,24 @@ function Policy({ config }: { config: Config | null }) {
         </Table>
       </Panel>
     </>
+  )
+}
+
+const navIcons: Record<Page, ReactNode> = {
+  Dashboard: <><rect x="4" y="4" width="7" height="7" rx="1.5" /><rect x="13" y="4" width="7" height="7" rx="1.5" /><rect x="4" y="13" width="7" height="7" rx="1.5" /><rect x="13" y="13" width="7" height="7" rx="1.5" /></>,
+  Agents: <><rect x="4" y="5" width="16" height="12" rx="2" /><path d="m8 10 2 1.5L8 13M12.5 13H16M8 20h8" /></>,
+  Nodes: <><rect x="5" y="5" width="14" height="10" rx="1.5" /><path d="M3 19h18" /></>,
+  Review: <path d="M12 3l1.8 4.6L18.5 9l-4.7 1.4L12 15l-1.8-4.6L5.5 9l4.7-1.4zM18 15l.9 2.1L21 18l-2.1.9L18 21l-.9-2.1L15 18l2.1-.9z" />,
+  'Audit log': <><path d="M9 6h11M9 12h11M9 18h11" /><circle cx="4.5" cy="6" r="1" /><circle cx="4.5" cy="12" r="1" /><circle cx="4.5" cy="18" r="1" /></>,
+  Vault: <><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></>,
+  Signatures: <path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6z" />,
+  Policy: <><path d="M6 3h8l4 4v14H6z" /><path d="M14 3v4h4M9 12h6M9 16h6" /></>,
+}
+
+function NavIcon({ page }: { page: Page }) {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      {navIcons[page]}
+    </svg>
   )
 }

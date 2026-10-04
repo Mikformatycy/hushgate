@@ -3,9 +3,9 @@ import type { GateEvent } from './api'
 
 export function Panel({ title, actions, children }: { title: string; actions?: ReactNode; children: ReactNode }) {
   return (
-    <section className="mb-5 rounded-lg bg-white shadow-[0_1px_1px_rgba(0,28,36,.3),1px_1px_1px_rgba(0,28,36,.15)]">
-      <header className="flex items-center justify-between border-b border-gray-200 px-5 py-3">
-        <h2 className="text-lg font-bold">{title}</h2>
+    <section className="mb-6 overflow-hidden rounded-2xl border border-line bg-white">
+      <header className="flex items-center justify-between border-b border-line px-6 py-4">
+        <h2 className="text-lg font-bold tracking-tight">{title}</h2>
         {actions}
       </header>
       <div>{children}</div>
@@ -19,30 +19,30 @@ export function Table({ head, children, empty }: { head: string[]; children: Rea
     <div className="overflow-x-auto">
       <table className="w-full text-left">
         <thead>
-          <tr className="border-b border-gray-200 bg-gray-50 text-xs font-bold text-gray-600">
+          <tr className="border-b border-line bg-page/60 text-xs font-bold text-sub">
             {head.map((h) => (
-              <th key={h} className="px-5 py-2.5 whitespace-nowrap">{h}</th>
+              <th key={h} className="px-6 py-3 whitespace-nowrap">{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>{children}</tbody>
       </table>
-      {rows === 0 && <p className="px-5 py-8 text-center text-gray-500">{empty ?? 'No data'}</p>}
+      {rows === 0 && <p className="px-6 py-8 text-center text-sub">{empty ?? 'No data'}</p>}
     </div>
   )
 }
 
 export function Td({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <td className={`border-b border-gray-100 px-5 py-2.5 align-top ${className}`}>{children}</td>
+  return <td className={`border-b border-line/70 px-6 py-3 align-top ${className}`}>{children}</td>
 }
 
 type Tone = 'ok' | 'bad' | 'warn' | 'info' | 'muted'
 const toneClass: Record<Tone, string> = {
   ok: 'text-ok',
   bad: 'text-bad',
-  warn: 'text-[#8d6605]',
+  warn: 'text-warn',
   info: 'text-link',
-  muted: 'text-gray-500',
+  muted: 'text-sub',
 }
 const toneIcon: Record<Tone, string> = { ok: '✓', bad: '⊗', warn: '⚠', info: 'ⓘ', muted: '○' }
 
@@ -56,10 +56,10 @@ export function Status({ tone, children }: { tone: Tone; children: ReactNode }) 
 }
 
 const tierStyle: Record<string, string> = {
-  C0: 'bg-gray-100 text-gray-700',
-  C1: 'bg-blue-50 text-blue-800',
-  C2: 'bg-amber-50 text-amber-800',
-  C3: 'bg-red-50 text-red-800',
+  C0: 'bg-page text-sub',
+  C1: 'bg-[#eef1f5] text-[#4b5a6c]',
+  C2: 'bg-gs-tint text-gs-deep',
+  C3: 'bg-bad-tint text-bad',
 }
 export const tierLabel: Record<string, string> = {
   C0: 'Public',
@@ -70,7 +70,7 @@ export const tierLabel: Record<string, string> = {
 
 export function TierBadge({ tier }: { tier: string }) {
   return (
-    <span className={`rounded px-2 py-0.5 text-xs font-bold ${tierStyle[tier] ?? ''}`}>
+    <span className={`rounded-md px-2 py-0.5 text-xs font-bold ${tierStyle[tier] ?? ''}`}>
       {tier} · {tierLabel[tier] ?? tier}
     </span>
   )
@@ -79,22 +79,22 @@ export function TierBadge({ tier }: { tier: string }) {
 export function Meter({ used, limit }: { used: number; limit: number }) {
   if (!limit) return <span>{used.toLocaleString()} tokens</span>
   const pct = Math.min(100, (used / limit) * 100)
-  const color = pct >= 100 ? 'bg-bad' : pct >= 80 ? 'bg-warn' : 'bg-link'
+  const color = pct >= 100 ? 'bg-bad' : pct >= 80 ? 'bg-gs-deep' : 'bg-gs'
   return (
     <div className="min-w-48">
-      <div className="mb-1 flex justify-between text-xs text-gray-600">
+      <div className="mb-1 flex justify-between text-xs text-sub">
         <span>{used.toLocaleString()} / {limit.toLocaleString()}</span>
         <span>{pct.toFixed(0)}%</span>
       </div>
-      <div className="h-1.5 rounded bg-gray-200">
-        <div className={`h-1.5 rounded ${color}`} style={{ width: `${pct}%` }} />
+      <div className="h-2 rounded-full bg-line">
+        <div className={`h-2 rounded-full ${color}`} style={{ width: `${pct}%` }} />
       </div>
     </div>
   )
 }
 
 export function Mono({ children }: { children: ReactNode }) {
-  return <code className="rounded bg-gray-100 px-1 py-0.5 font-mono text-xs">{children}</code>
+  return <code className="rounded-md bg-page px-1.5 py-0.5 font-mono text-xs">{children}</code>
 }
 
 export function time(iso: string) {
