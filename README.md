@@ -2,7 +2,7 @@
 
 An AI control layer that sits between AI agents and LLM providers. Every request and every tool call an agent makes goes through it, so the organization can keep secrets and personal data away from the model, stop agents from taking actions they shouldn't, catch unapproved AI use, and cap spend. A dashboard shows what happened and why.
 
-To run it and walk through the demo scenarios, see [INSTRUCTION.md](INSTRUCTION.md).
+To run it: [RUN.md](RUN.md) (every task as one command), [INSTRUCTION.md](INSTRUCTION.md) (setups, scenarios, configuration) and [DEMO.md](DEMO.md) (the live demo, with prompts verified against real Claude Code).
 
 ## Problems it solves
 
@@ -86,12 +86,13 @@ Everything in the right-hand column lives in one file, [`config/hushgate.yaml`](
 - **Developer machines and CI, gateway mode.** Agents point at the gate (`ANTHROPIC_BASE_URL=http://gate:8080`), or a device-management profile sets it. The gate holds the real provider key, so agents never do. See `docker-compose.yml`.
 - **Company network, forward-proxy mode.** Device management installs the company root CA and proxy settings at onboarding. The gate decrypts LLM traffic, identifies the device, and blocks LLM use from unregistered devices or to unapproved providers, including self-hosted models. Ordinary web traffic passes through. See `docker-compose.corp.yml`.
 - **Servers and Kubernetes.** Agent workloads get default-deny egress with the gate as the only destination; the firewall, not the agent, guarantees nothing goes around it.
+- **Sandboxed coding agents.** The repository runs real Claude Code in a container whose only network route is the gate (`just claude-sandbox`). It uses a normal Claude subscription; every request is masked, policed and logged, and a command the gate allows still cannot reach the internet directly.
 
 Deep inspection (masking, tool policy, budgets) covers the Anthropic Messages API. Other LLM APIs (OpenAI, Ollama, Gemini) are recognized and allowed or blocked as a whole.
 
 ## Testing
 
-56 automated tests cover allowed and blocked cases for every control, including false positives:
+57 automated tests cover allowed and blocked cases for every control, including false positives:
 
 ```sh
 docker run --rm -v "$PWD":/src -w /src/proxy golang:1.26-alpine go test ./...
@@ -103,11 +104,18 @@ docker run --rm -v "$PWD":/src -w /src/proxy golang:1.26-alpine go test ./...
 proxy/       the gate (Go): gateway, forward proxy, vault, policy, budgets, admin API
 dashboard/   React dashboard
 advisor/     AI advisor (Python, TypeSafe Jev)
-agent/       demo agent with read_file, write_file, send_email, post_to_slack
+agent/       demo agent with read_file, write_file, send_email, post_to_slack, run_command
+sandbox/     real Claude Code in a container that can only reach the gate
+config/      hushgate.yaml (the policy) and signatures.yaml (attack signatures)
 demo/        fake model, demo workspace, company network simulation
+deploy/      Prometheus configuration
 ```
 
 ## Current limitations
 
 - The review and injection queues live in memory and are rebuilt after a restart; audit events persist in the audit file, budgets and kills in Redis, review decisions in the policy file.
 - Budgets are counted in tokens, not currency.
+
+## Team
+
+**Mikformatyka**, HackYeah 2026: Franciszek Fabiński (lead developer), Maciej Rapicki, Jan Bancerewicz, Karolina Glaza, Piotr Uszyński.
