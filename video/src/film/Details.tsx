@@ -59,7 +59,7 @@ export const AttackDetail: React.FC<{f: number}> = ({f}) => {
         </div>
       </At>
       <Line x1={380} x2={AGENT - 62} y={LANE} p={tw(f, s + 30, s + 42)} />
-      <At x={440 - 150} y={92} f={f} at={s + 44} style={{width: 300, textAlign: 'center'}}><Pill tone="warn" size={19}>⚠ prompt injection · 99%</Pill></At>
+      <At x={440 - 150} y={92} f={f} at={s + 44} style={{width: 300, textAlign: 'center'}}><Pill tone="warn" size={19}>⚠ prompt injection · 98%</Pill></At>
       <At x={0} y={0} f={f} at={s + 24}>
         <Node x={AGENT} y={LANE} r={60} bg={C.navy} border={killed ? C.bad : C.gs}><span style={{fontFamily: MONO, fontSize: 30, fontWeight: 600, color: '#FFFFFF'}}>&gt;_</span></Node>
         <div style={{position: 'absolute', left: AGENT - 100, width: 200, top: LANE + 76, textAlign: 'center', fontSize: 20, fontWeight: 700, color: killed ? C.bad : C.sub}}>{killed ? 'agent halted' : 'agent'}</div>
@@ -243,7 +243,7 @@ export const PolicyDetail: React.FC<{f: number}> = ({f}) => {
 
 const EVENTS: [string, string, string, string][] = [
   ['04:48:12', 'Masked', '2 secrets replaced in a request', C.gs],
-  ['04:48:29', 'Prompt injection', 'read_file quarterly_report.md, 99%', C.warn],
+  ['04:48:29', 'Prompt injection', 'read_file quarterly_report.md, 98%', C.warn],
   ['04:48:46', 'Agent halted', 'send_email carried a secret', C.bad],
   ['04:49:02', 'Signature block', 'HG-RCE-001, script piped into a shell', C.bad],
   ['04:50:25', 'Shadow AI', 'guest-laptop → llm.sketchy-vps.example', C.bad],

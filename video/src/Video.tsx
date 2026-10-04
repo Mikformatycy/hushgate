@@ -33,7 +33,7 @@ export const Video = () => {
   const light = Math.min(1, Math.max(0, (r1 - 380) / 160)) * (1 - Math.min(1, Math.max(0, (r2 - 330) / 160)));
   const ink = interpolateColors(light, [0, 1], ['#FFFFFF', C.ink]);
   return (
-    <AbsoluteFill style={{background: C.navy, fontFamily: SANS, color: C.ink, overflow: 'hidden'}}>
+    <AbsoluteFill style={{background: C.navy, fontFamily: SANS, color: C.ink, overflow: 'hidden', fontVariantLigatures: 'none'}}>
       {r1 > 0 && <AbsoluteFill style={{background: C.canvas, clipPath: `circle(${r1}px at ${GATE_X}px 530px)`}} />}
       {r2 > 0 && <AbsoluteFill style={{background: C.navy, clipPath: `circle(${r2}px at 960px 540px)`}} />}
       <Flow f={f} />
