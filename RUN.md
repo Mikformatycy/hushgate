@@ -275,6 +275,21 @@ just logs
 just logs corp
 ```
 
+## Make the video
+
+Render the 2-minute video to `video/out/hushgate.mp4` (needs Node):
+
+```sh
+just video
+# without just: cd video && npm install && npm run render
+```
+
+Preview and edit it in Remotion Studio:
+
+```sh
+just video-studio
+```
+
 ## Run the tests
 
 Run all tests (no Go needed):
