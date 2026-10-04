@@ -67,7 +67,7 @@ Claude Code shows every refusal from the gate as `Failed to authenticate. API Er
 
 ## Part 2: change the rules live (let a judge do it)
 
-Open `config/hushgate.yaml` (`just policy`), make the change, save, and send the prompt. The dashboard shows "Policy reloaded" with exactly what changed. Undo each change afterwards.
+Open `5-implementation/config/hushgate.yaml` (`just policy`), make the change, save, and send the prompt. The dashboard shows "Policy reloaded" with exactly what changed. Undo each change afterwards.
 
 | Change in `hushgate.yaml` | Prompt | Result |
 |---|---|---|
@@ -91,5 +91,5 @@ Real Claude refuses to send a password to another host, even when asked: it sugg
 | An agent is halted from a previous run | `just claude-sandbox-reset`, `just gw-reset`, or Reset on the Agents page |
 | Claude refuses a prompt or answers differently | Move on; the scripted demo (Part 3) always behaves the same |
 | No internet at the venue | `just gateway-down`, `just gateway-offline`, then the `gw-*` recipes |
-| Policy left in a changed state | `git checkout config/hushgate.yaml` |
+| Policy left in a changed state | `git checkout 5-implementation/config/hushgate.yaml` |
 | Dashboard empty after a restart | Normal for the performance panel; the audit log restores from its file |

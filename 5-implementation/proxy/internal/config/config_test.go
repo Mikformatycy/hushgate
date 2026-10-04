@@ -276,3 +276,16 @@ func TestAutoAccept(t *testing.T) {
 		t.Fatal("an empty variables list should allow nothing")
 	}
 }
+
+// The example policies in 1-solution/examples must stay valid as the schema changes.
+func TestExampleProfilesAreValid(t *testing.T) {
+	for _, name := range []string{"strict.yaml", "relaxed.yaml"} {
+		b, err := os.ReadFile(filepath.Join("../../../../1-solution/examples", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Parse(b); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}

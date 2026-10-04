@@ -1,6 +1,6 @@
 # How to run HushGate
 
-You need Docker. The commands use [`just`](https://github.com/casey/just); the line under each one shows the same thing without it. Run `just` on its own to list everything.
+You need Docker. The commands use [`just`](https://github.com/casey/just); the line under each one shows the same thing without it. Run `just` on its own to list everything. Run every command from the repository root.
 
 Optional: put `TYPESAFE_API_KEY=...` in a `.env` file in the repository root to turn on the AI advisor.
 
@@ -24,7 +24,7 @@ Run the gateway with a fake AI model (offline):
 
 ```sh
 just gateway-offline
-# without just: python3 demo/fake_upstream.py &
+# without just: python3 5-implementation/demo/fake_upstream.py &
 #               UPSTREAM_URL=http://host.docker.internal:9999 docker compose up -d --build
 ```
 
@@ -188,7 +188,7 @@ Start the gateway with `just gateway-up`, then:
 
 ```sh
 just claude-code
-# without just: cd demo/workspace && ANTHROPIC_BASE_URL=http://localhost:8080 \
+# without just: cd 5-implementation/demo/workspace && ANTHROPIC_BASE_URL=http://localhost:8080 \
 #               ANTHROPIC_CUSTOM_HEADERS="X-Agent-Id: my-claude-code" claude
 ```
 
@@ -214,7 +214,7 @@ just claude-sandbox
 # without just: docker compose exec claude-code claude
 ```
 
-For the live demo, use the rehearsed prompts in [DEMO.md](DEMO.md).
+For the live demo, use the rehearsed prompts in [DEMO.md](../4-testing/DEMO.md).
 
 Check that it cannot reach the internet except through the gate:
 
@@ -228,21 +228,21 @@ Change the policy (tools, masking, budgets, models, devices):
 
 ```sh
 just policy
-# or edit config/hushgate.yaml
+# or edit 5-implementation/config/hushgate.yaml
 ```
 
 Change the attack signatures:
 
 ```sh
 just signatures
-# or edit config/signatures.yaml
+# or edit 5-implementation/config/signatures.yaml
 ```
 
 Change the protected secrets:
 
 ```sh
 just vault
-# or edit demo/workspace/.env
+# or edit 5-implementation/demo/workspace/.env
 ```
 
 ## Get reports
@@ -277,7 +277,7 @@ just logs corp
 
 ## Make the launch video
 
-Render the launch video (about 55 seconds) to `video/out/hushgate.mp4` (needs Node):
+Render the launch video (about 55 seconds) to `5-implementation/video/out/hushgate.mp4` (needs Node):
 
 ```sh
 just video
@@ -296,12 +296,26 @@ Run all tests (no Go needed):
 
 ```sh
 just tests
-# without just: docker run --rm -v "$PWD":/src -w /src/proxy golang:1.26-alpine go test ./...
+# without just: docker run --rm -v "$PWD":/src -w /src/5-implementation/proxy golang:1.26-alpine go test ./...
 ```
 
 Run the tests with Go installed:
 
 ```sh
 just tests-local
-# without just: cd proxy && go test -race ./...
+# without just: cd 5-implementation/proxy && go test -race ./...
+```
+
+Check every scenario end to end against the running company network demo (start it with `just corp-up`):
+
+```sh
+just e2e
+# without just: python3 4-testing/e2e.py
+```
+
+Measure the cost of every enforcement step (needs Go 1.26):
+
+```sh
+just bench
+# without just: cd 5-implementation/proxy && go test ./internal/bench ./internal/gateway -run '^$' -bench . -benchmem
 ```
