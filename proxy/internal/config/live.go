@@ -58,6 +58,14 @@ func (l *Live) Load() error {
 
 func (l *Live) Get() *Config { return l.cur.Load() }
 
+// Reload checks the file now instead of waiting for the next poll.
+func (l *Live) Reload() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	_, err := l.reload(false)
+	return err
+}
+
 func (l *Live) Status() Status { return *l.status.Load() }
 
 // Watch polls for changes until ctx ends. Polling (not inotify) because

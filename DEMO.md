@@ -20,7 +20,7 @@ Claude Code shows every refusal from the gate as `Failed to authenticate. API Er
 
 - Claude reads the file and summarizes it.
 - The client's IBAN and PESEL in the report reach the model only as placeholders.
-- About 0.5 s after the read, the amber banner: **prompt injection in `Read quarterly_report.md`, 99%**.
+- About 0.5 s after the read, the violet banner: **prompt injection in `Read quarterly_report.md`, 99%**.
 - Claude also spots the hidden instruction itself and refuses it. Point out the two independent layers.
 - Show: Dashboard banner, Audit log (`Masked`, `Prompt injection`).
 

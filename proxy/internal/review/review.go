@@ -1,6 +1,7 @@
 // Package review is the human-in-the-loop queue for decisions the rules
 // could not make: tools with no policy entry and variables no rule
-// recognized. An AI advisor may attach a suggestion; only a human applies it.
+// recognized. An AI advisor may attach a suggestion; a person applies it,
+// unless the policy file lets confident suggestions apply automatically.
 package review
 
 import (
@@ -37,6 +38,9 @@ type Item struct {
 	Status     string         `json:"status"` // pending | applied | dismissed
 	Decision   string         `json:"decision,omitempty"`
 	DecidedAt  *time.Time     `json:"decided_at,omitempty"`
+	DecidedBy  string         `json:"decided_by,omitempty"` // reviewer | auto-accept | hushgate.yaml
+	// Auto says whether the suggestion was applied without a person, and why or why not.
+	Auto string `json:"auto,omitempty"`
 }
 
 var (
@@ -131,7 +135,7 @@ func (s *Store) Resolve(id, status, decision string) (Item, error) {
 		return Item{}, fmt.Errorf("value %q not one of %v", decision, it.Options)
 	}
 	now := time.Now()
-	it.Status, it.Decision, it.DecidedAt = status, decision, &now
+	it.Status, it.Decision, it.DecidedAt, it.DecidedBy = status, decision, &now, "reviewer"
 	return *it, nil
 }
 
@@ -145,8 +149,26 @@ func (s *Store) Settle(id, decision string) bool {
 		return false
 	}
 	now := time.Now()
-	it.Status, it.Decision, it.DecidedAt = "applied", decision, &now
+	it.Status, it.Decision, it.DecidedAt, it.DecidedBy = "applied", decision, &now, "hushgate.yaml"
 	return true
+}
+
+// SetDecidedBy records who made a decision that was written to the policy file.
+func (s *Store) SetDecidedBy(id, by string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if it, ok := s.items[id]; ok {
+		it.DecidedBy = by
+	}
+}
+
+// SetAuto records the auto-accept outcome for an item's suggestion.
+func (s *Store) SetAuto(id, note string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if it, ok := s.items[id]; ok {
+		it.Auto = note
+	}
 }
 
 // Shape describes a value without revealing it: length, character classes,

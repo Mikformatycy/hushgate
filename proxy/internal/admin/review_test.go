@@ -197,3 +197,111 @@ func TestMetricsEndpointAuth(t *testing.T) {
 		t.Fatalf("admin scrape: %d", rec.Code)
 	}
 }
+
+const autoOn = "review:\n  auto_accept:\n    enabled: true\n"
+
+func autoAPI(t *testing.T, review string) (*API, http.Handler) {
+	api, _ := newAPI(t, "tools:\n  default: deny\n  rules: {}\nvault:\n  env_files: [{{ENV}}]\n  overrides: {}\n"+review,
+		"TEAM_CHANNEL=payments-oncall\n")
+	api.Reviews.ObserveTool("post_to_slack", "Post a message to Slack", map[string]any{"type": "object"},
+		"deny (policy default)", "a1")
+	return api, api.Handler()
+}
+
+func suggest(t *testing.T, h http.Handler, id, body string) {
+	t.Helper()
+	if rec := do(h, "POST", "/api/reviews/"+id+"/suggestion", "advisor", body); rec.Code != 200 {
+		t.Fatalf("suggest %s: %d %s", id, rec.Code, rec.Body)
+	}
+}
+
+func TestAutoAcceptOffByDefault(t *testing.T) {
+	api, h := reviewAPI(t)
+	suggest(t, h, "tool:post_to_slack", `{"value":"network","probabilities":{"network":0.99},"confidence":0.99,"model":"jev"}`)
+	it, _ := api.Reviews.Get("tool:post_to_slack")
+	if it.Status != "pending" || it.Auto != "waits for a reviewer: auto-accept is off" {
+		t.Fatalf("item = %+v", it)
+	}
+	if api.Policy.SinkFor("post_to_slack") != policy.Deny {
+		t.Fatal("a suggestion changed policy while auto-accept is off")
+	}
+}
+
+func TestAutoAcceptAppliesConfidentSuggestion(t *testing.T) {
+	api, h := autoAPI(t, autoOn)
+	suggest(t, h, "tool:post_to_slack", `{"value":"network","probabilities":{"network":0.97,"local":0.02,"deny":0.01},"confidence":0.93,"model":"jev-1.13.0"}`)
+
+	it, _ := api.Reviews.Get("tool:post_to_slack")
+	if it.Status != "applied" || it.Decision != "network" || it.DecidedBy != "auto-accept" || !strings.HasPrefix(it.Auto, "applied automatically") {
+		t.Fatalf("item = %+v", it)
+	}
+	if api.Policy.SinkFor("post_to_slack") != policy.Network {
+		t.Fatal("policy not updated")
+	}
+	if b, _ := os.ReadFile(api.Live.Status().Path); !strings.Contains(string(b), "post_to_slack: network") {
+		t.Fatalf("decision not written to the policy file:\n%s", b)
+	}
+	var logged bool
+	for _, e := range api.Events.After(0) {
+		logged = logged || (e.Kind == "review" && e.Agent == "auto-accept" && e.Action == "network")
+	}
+	if !logged {
+		t.Fatal("auto-accept not in the audit log")
+	}
+	if rec := do(h, "POST", "/api/reviews/tool:post_to_slack/decision", "admin", `{"action":"apply","value":"local"}`); rec.Code != http.StatusConflict {
+		t.Fatalf("decision after auto-accept: %d", rec.Code)
+	}
+}
+
+func TestAutoAcceptKeepsGuards(t *testing.T) {
+	api, h := autoAPI(t, autoOn)
+	// "local" restores real secrets into a tool the agent itself described: never automatic by default.
+	suggest(t, h, "tool:post_to_slack", `{"value":"local","probabilities":{"local":0.99},"confidence":0.99,"model":"jev"}`)
+	// Unmasking a variable: never automatic by default.
+	suggest(t, h, "var:TEAM_CHANNEL", `{"value":"C1","probabilities":{"C1":0.99},"confidence":0.99,"model":"jev"}`)
+
+	for id, want := range map[string]string{
+		"tool:post_to_slack": "local is not in review.auto_accept.tools",
+		"var:TEAM_CHANNEL":   "C1 is not in review.auto_accept.variables",
+	} {
+		it, _ := api.Reviews.Get(id)
+		if it.Status != "pending" || !strings.Contains(it.Auto, want) {
+			t.Errorf("%s = %+v", id, it)
+		}
+	}
+	if api.Policy.SinkFor("post_to_slack") != policy.Deny {
+		t.Fatal("policy changed")
+	}
+	if masked, _ := api.Vault.Mask([]byte("ping payments-oncall")); strings.Contains(string(masked), "payments-oncall") {
+		t.Fatal("variable unmasked")
+	}
+
+	// Not sure enough: waits too.
+	api2, h2 := autoAPI(t, autoOn)
+	suggest(t, h2, "tool:post_to_slack", `{"value":"network","probabilities":{"network":0.9},"confidence":0.99,"model":"jev"}`)
+	if it, _ := api2.Reviews.Get("tool:post_to_slack"); it.Status != "pending" || !strings.Contains(it.Auto, "below the 95% needed") {
+		t.Fatalf("item = %+v", it)
+	}
+}
+
+func TestAutoAcceptAfterPolicyReload(t *testing.T) {
+	api, h := autoAPI(t, "")
+	suggest(t, h, "tool:post_to_slack", `{"value":"network","probabilities":{"network":0.99},"confidence":0.99,"model":"jev"}`)
+	if it, _ := api.Reviews.Get("tool:post_to_slack"); it.Status != "pending" {
+		t.Fatalf("applied while off: %+v", it)
+	}
+
+	// Turning auto-accept on applies the suggestion that was already waiting.
+	path := api.Live.Status().Path
+	b, _ := os.ReadFile(path)
+	if err := os.WriteFile(path, append(b, autoOn...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := api.Live.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	api.RecheckReviews()
+	if it, _ := api.Reviews.Get("tool:post_to_slack"); it.Status != "applied" || it.DecidedBy != "auto-accept" {
+		t.Fatalf("item = %+v", it)
+	}
+}

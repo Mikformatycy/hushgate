@@ -56,7 +56,28 @@ type Config struct {
 		Tools           []string `yaml:"tools"`
 		NetworkCommands []string `yaml:"network_commands"`
 	} `yaml:"bash_guard"`
+	Review struct {
+		AutoAccept AutoAccept `yaml:"auto_accept"`
+	} `yaml:"review"`
 }
+
+// AutoAccept lets the AI advisor's suggestion take effect without a person,
+// when the classifier is sure enough and the outcome is on an allowed list.
+type AutoAccept struct {
+	Enabled        bool     `yaml:"enabled"`
+	MinProbability *float64 `yaml:"min_probability"` // of the suggested option
+	MinConfidence  *float64 `yaml:"min_confidence"`  // the classifier's calibrated confidence
+	Tools          []string `yaml:"tools"`           // tool outcomes that may be applied automatically
+	Variables      []string `yaml:"variables"`       // variable tiers that may be applied automatically
+}
+
+// Without explicit lists, auto-accept can only make things stricter than an
+// unreviewed default: no tool becomes "local" (real secrets restored into a tool
+// whose description the agent supplied) and no variable gets unmasked.
+var (
+	DefaultAutoAcceptTools     = []string{"network", "deny"}
+	DefaultAutoAcceptVariables = []string{"C2", "C3"}
+)
 
 // DefaultNetworkCommands are programs that send data off the machine.
 var DefaultNetworkCommands = []string{"curl", "wget", "nc", "ncat", "netcat", "socat", "scp", "sftp", "rsync",
@@ -112,6 +133,21 @@ func (c *Config) defaults() {
 		v := 0.8
 		c.Injection.AlertThreshold = &v
 	}
+	aa := &c.Review.AutoAccept
+	if aa.MinProbability == nil {
+		v := 0.95
+		aa.MinProbability = &v
+	}
+	if aa.MinConfidence == nil {
+		v := 0.9
+		aa.MinConfidence = &v
+	}
+	if aa.Tools == nil {
+		aa.Tools = DefaultAutoAcceptTools
+	}
+	if aa.Variables == nil {
+		aa.Variables = DefaultAutoAcceptVariables
+	}
 }
 
 func (c *Config) validate() error {
@@ -157,6 +193,22 @@ func (c *Config) validate() error {
 	}
 	if t := *c.Injection.AlertThreshold; t < 0 || t > 1 {
 		bad("injection.alert_threshold: %v must be between 0 and 1", t)
+	}
+	aa := c.Review.AutoAccept
+	for name, v := range map[string]float64{"min_probability": *aa.MinProbability, "min_confidence": *aa.MinConfidence} {
+		if v < 0 || v > 1 {
+			bad("review.auto_accept.%s: %v must be between 0 and 1", name, v)
+		}
+	}
+	for _, v := range aa.Tools {
+		if !oneOf(v, sinks) {
+			bad("review.auto_accept.tools: %q is not one of %s", v, strings.Join(sinks, ", "))
+		}
+	}
+	for _, v := range aa.Variables {
+		if !oneOf(v, tiers) {
+			bad("review.auto_accept.variables: %q is not one of %s", v, strings.Join(tiers, ", "))
+		}
 	}
 	if c.Signatures.RefreshSeconds < 10 {
 		bad("signatures.refresh_seconds: must be at least 10")
@@ -208,6 +260,37 @@ func (c *Config) ModelAllowed(model string) bool {
 
 func (c *Config) HostApproved(host string) bool {
 	return oneOf(host, c.LLMHosts.Approved)
+}
+
+// AutoAccepts decides whether the advisor's suggestion for a review of the
+// given kind ("tool" or "variable") may be applied without a person. The
+// reason explains the outcome either way; the Review page shows it.
+func (c *Config) AutoAccepts(kind, value string, probabilities map[string]float64, confidence float64) (bool, string) {
+	aa := c.Review.AutoAccept
+	allowed, list := aa.Tools, "tools"
+	if kind == "variable" {
+		allowed, list = aa.Variables, "variables"
+	}
+	p, known := probabilities[value]
+	switch {
+	case !aa.Enabled:
+		return false, "auto-accept is off"
+	case !oneOf(value, allowed):
+		return false, fmt.Sprintf("%s is not in review.auto_accept.%s", value, list)
+	case !known:
+		return false, "the advisor gave no probability for " + value
+	case p < *aa.MinProbability:
+		return false, fmt.Sprintf("%s at %s, below the %s needed", value, pct(p), pct(*aa.MinProbability))
+	case confidence < *aa.MinConfidence:
+		return false, fmt.Sprintf("confidence %s, below the %s needed", pct(confidence), pct(*aa.MinConfidence))
+	}
+	return true, fmt.Sprintf("%s at %s with %s confidence (needs %s and %s)",
+		value, pct(p), pct(confidence), pct(*aa.MinProbability), pct(*aa.MinConfidence))
+}
+
+// pct prints 0.955 as "95.5%" and 0.9 as "90%".
+func pct(v float64) string {
+	return strings.TrimSuffix(fmt.Sprintf("%.1f", v*100), ".0") + "%"
 }
 
 // Diff lists human-readable changes between two configs. Node tokens are
@@ -274,6 +357,12 @@ func flatten(c *Config) map[string]string {
 	m["signatures.disabled"] = "[" + strings.Join(c.Signatures.Disabled, ", ") + "]"
 	m["bash_guard.tools"] = "[" + strings.Join(c.BashGuard.Tools, ", ") + "]"
 	m["bash_guard.network_commands"] = "[" + strings.Join(c.BashGuard.NetworkCommands, ", ") + "]"
+	aa := c.Review.AutoAccept
+	m["review.auto_accept.enabled"] = fmt.Sprint(aa.Enabled)
+	m["review.auto_accept.min_probability"] = fmt.Sprint(*aa.MinProbability)
+	m["review.auto_accept.min_confidence"] = fmt.Sprint(*aa.MinConfidence)
+	m["review.auto_accept.tools"] = "[" + strings.Join(aa.Tools, ", ") + "]"
+	m["review.auto_accept.variables"] = "[" + strings.Join(aa.Variables, ", ") + "]"
 	return m
 }
 

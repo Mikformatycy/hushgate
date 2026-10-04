@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/Mikformatycy/hushgate/proxy/internal/admin"
@@ -76,8 +77,15 @@ func main() {
 		Feeds:      signature.NewLoader(),
 	}
 	policyPath := env("HUSHGATE_POLICY", "/etc/hushgate/hushgate.yaml")
+	// After a reload, waiting AI suggestions are checked against the new
+	// review.auto_accept settings. Set once the admin API exists; run in the
+	// background because applying a decision edits (and reloads) the file.
+	var onReload atomic.Pointer[func()]
 	live := config.NewLive(policyPath, eng.Apply, func(action, detail string) {
 		logger.Record(audit.Event{Agent: "hushgate.yaml", Kind: "policy", Action: action, Reason: detail})
+		if f := onReload.Load(); f != nil && action == "reloaded" {
+			go (*f)()
+		}
 	})
 	// Watch signature feeds too: a new local file or a newly fetched URL copy reloads.
 	live.Extra = func(c *config.Config) [][]byte { return eng.Feeds.Raw(c.Signatures.Feeds) }
@@ -137,6 +145,8 @@ func main() {
 		api := &admin.API{Token: token, AdvisorToken: os.Getenv("ADVISOR_TOKEN"), Events: ring, Budget: store,
 			Audit: logger, Vault: eng.Vault, Policy: eng.Policy, Reviews: eng.Reviews, Scans: scans, Live: live,
 			Signatures: eng.Signatures, Metrics: mx, MetricsToken: os.Getenv("METRICS_TOKEN"), AuditFile: auditFile}
+		recheck := api.RecheckReviews
+		onReload.Store(&recheck)
 		adminAddr := env("ADMIN_ADDR", ":8081")
 		log.Printf("admin api listening on %s", adminAddr)
 		go func() { log.Fatal(http.ListenAndServe(adminAddr, api.Handler())) }()
