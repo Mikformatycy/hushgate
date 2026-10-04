@@ -23,7 +23,7 @@ export const End: React.FC<{f: number}> = ({f}) => {
       </AbsoluteFill>
       <Caption f={f} cues={[[at + 46, T.total + 40, 'Use AI. *Keep your secrets.*', C.gs]]} color="#FFFFFF" top={600} />
       <div style={{position: 'absolute', left: 0, right: 0, top: 740, textAlign: 'center', fontSize: 28, fontWeight: 600, color: C.navyText, opacity: tw(f, at + 62, at + 76)}}>
-        57 tests · 19 attack signatures · 0.3 ms overhead
+        65 tests · 19 attack signatures · 0.3 ms overhead
       </div>
       <div style={{position: 'absolute', left: 0, right: 0, top: 880, textAlign: 'center', fontSize: 22, color: C.navyText, opacity: tw(f, at + 74, at + 88)}}>
         Team Mikformatyka · HackYeah 2026
