@@ -1,4 +1,5 @@
-import {AbsoluteFill, useCurrentFrame} from 'remotion';
+import type React from 'react';
+import {AbsoluteFill, Audio, Sequence, staticFile, useCurrentFrame} from 'remotion';
 import {C, SANS} from './theme';
 import {Caption, kf} from './kit';
 import {interpolateColors} from 'remotion';
@@ -7,6 +8,8 @@ import {GATE_X, T} from './film/layout';
 import {Flow} from './film/Flow';
 import {Dash} from './film/Dash';
 import {End} from './film/End';
+import {CLIPS, clipFrame} from './voiceover';
+import type {Voice} from './voiceover';
 
 export const TOTAL = T.total;
 
@@ -25,7 +28,7 @@ const CUES: Cue[] = [
   [1324, 1458, 'Every action, *on record*.', C.gsDeep],
 ];
 
-export const Video = () => {
+export const Video: React.FC<{voice: Voice}> = ({voice}) => {
   const f = useCurrentFrame();
   // The light world opens as a circle out of the gate; the dark one closes back in at the end.
   const r1 = kf(f, [[T.zeroIn, 0], [T.zeroIn + 40, 2400]]);
@@ -40,6 +43,11 @@ export const Video = () => {
       <Dash f={f} />
       <Caption f={f} cues={CUES} color={ink} />
       <End f={f} />
+      {CLIPS.map(([id, at]) => (
+        <Sequence key={id} from={clipFrame(at)} layout="none">
+          <Audio src={staticFile(`vo/${voice}/${id}.mp3`)} />
+        </Sequence>
+      ))}
     </AbsoluteFill>
   );
 };

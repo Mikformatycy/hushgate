@@ -246,6 +246,11 @@ tests-local:
 video-studio:
     cd {{ impl }}/video && npm install && npm run studio
 
+# Regenerate the voiceover clips with ElevenLabs Eleven v4 (needs ELEVENLABS_API_KEY)
+[group('video')]
+voiceover:
+    cd {{ impl }}/video && python3 scripts/voiceover.py
+
 # Render the launch video to 5-implementation/video/out/hushgate.mp4 (needs Node)
 [group('video')]
 video:

@@ -277,11 +277,17 @@ just logs corp
 
 ## Make the launch video
 
-Render the launch video (about 55 seconds) to `5-implementation/video/out/hushgate.mp4` (needs Node):
+Render the launch video (55 seconds, with voiceover) to `5-implementation/video/out/hushgate.mp4` (needs Node):
 
 ```sh
 just video
 # without just: cd video && npm install && npm run render
+```
+
+The video has an English voiceover made with ElevenLabs Eleven v4, in two voices. `just video` uses Tia; for Arthur, render with `--props='{"voice":"arthur"}'`. To regenerate the voice clips (needs an ElevenLabs key):
+
+```sh
+ELEVENLABS_API_KEY=... just voiceover
 ```
 
 Preview and edit it in Remotion Studio:

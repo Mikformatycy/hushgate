@@ -20,7 +20,7 @@ export const T = {
   policy: [1195, 1315] as const,
   audit: [1320, 1460] as const,
   end: 1460,
-  total: 1620,
+  total: 1650,
 };
 
 export const ENV: Rect = {x: 190, y: 330, w: 650, h: 420, r: 22};
