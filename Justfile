@@ -229,12 +229,12 @@ tests:
 tests-local:
     cd proxy && go test -race ./...
 
-# Preview and edit the 2-minute video in Remotion Studio (needs Node)
+# Preview and edit the launch video in Remotion Studio (needs Node)
 [group('video')]
 video-studio:
     cd video && npm install && npm run studio
 
-# Render the video to video/out/hushgate.mp4 (needs Node)
+# Render the launch video to video/out/hushgate.mp4 (needs Node)
 [group('video')]
 video:
     cd video && npm install && npm run render

@@ -1,31 +1,54 @@
-import {AbsoluteFill, Series} from 'remotion';
-import {C, SERIF} from './theme';
-import {Scene} from './ui';
-import {Hook} from './scenes/Hook';
-import {Risk} from './scenes/Risk';
-import {OneGate} from './scenes/OneGate';
-import {Leaks} from './scenes/Leaks';
-import {Filters} from './scenes/Filters';
+import React from 'react';
+import {AbsoluteFill} from 'remotion';
+import {TransitionSeries, linearTiming} from '@remotion/transitions';
+import type {TransitionPresentation} from '@remotion/transitions';
+import {fade} from '@remotion/transitions/fade';
+import {slide} from '@remotion/transitions/slide';
+import {wipe} from '@remotion/transitions/wipe';
+import {C} from './theme';
+import {Intro} from './scenes/Intro';
+import {EnvFile} from './scenes/EnvFile';
+import {Leak} from './scenes/Leak';
+import {Reveal} from './scenes/Reveal';
+import {GateFlow} from './scenes/GateFlow';
+import {ZeroLeaks} from './scenes/ZeroLeaks';
+import {Attack} from './scenes/Attack';
+import {Signatures} from './scenes/Signatures';
+import {Controls} from './scenes/Controls';
 import {Cost} from './scenes/Cost';
-import {Oversight} from './scenes/Oversight';
-import {Rollout} from './scenes/Rollout';
-import {Close} from './scenes/Close';
+import {ShadowAI} from './scenes/ShadowAI';
+import {Audit} from './scenes/Audit';
+import {DropIn} from './scenes/DropIn';
+import {Proof} from './scenes/Proof';
+import {End} from './scenes/End';
 
-// Durations in frames at 30 fps; they add up to exactly two minutes.
-const SCENES: [React.FC, number][] = [
-  [Hook, 300], [Risk, 420], [OneGate, 330], [Leaks, 570], [Filters, 540],
-  [Cost, 540], [Oversight, 360], [Rollout, 270], [Close, 270],
+// Scenes and their length in frames (30 fps). Problem, reveal, results, proof.
+const STEPS: [React.FC, number][] = [
+  [Intro, 140], [EnvFile, 140], [Leak, 150], [Reveal, 105],
+  [GateFlow, 285], [ZeroLeaks, 165], [Attack, 285], [Signatures, 150],
+  [Controls, 240], [Cost, 270], [ShadowAI, 225], [Audit, 250],
+  [DropIn, 165], [Proof, 135], [End, 240],
 ];
-export const TOTAL = SCENES.reduce((s, [, d]) => s + d, 0);
+// Transition into the next scene, one per gap.
+const T = 12;
+const TRANS = [
+  fade(), fade(), fade(), fade(),
+  slide({direction: 'from-right'}), fade(), slide({direction: 'from-right'}), fade(),
+  slide({direction: 'from-right'}), wipe({direction: 'from-left'}), wipe({direction: 'from-right'}), fade(),
+  slide({direction: 'from-bottom'}), fade(),
+] as TransitionPresentation<any>[];
 
-export const Video = () => (
-  <AbsoluteFill style={{background: C.bg, color: C.fg, fontFamily: SERIF}}>
-    <Series>
-      {SCENES.map(([S, d], i) => (
-        <Series.Sequence key={i} durationInFrames={d}>
-          <Scene dur={d}><S /></Scene>
-        </Series.Sequence>
-      ))}
-    </Series>
-  </AbsoluteFill>
-);
+export const TOTAL = STEPS.reduce((s, [, d]) => s + d, 0) - TRANS.length * T;
+
+export const Video = () => {
+  const items: React.ReactNode[] = [];
+  STEPS.forEach(([Scene, d], i) => {
+    items.push(<TransitionSeries.Sequence key={`s${i}`} durationInFrames={d}><Scene /></TransitionSeries.Sequence>);
+    if (i < TRANS.length) items.push(<TransitionSeries.Transition key={`t${i}`} presentation={TRANS[i]} timing={linearTiming({durationInFrames: T})} />);
+  });
+  return (
+    <AbsoluteFill style={{background: C.night}}>
+      <TransitionSeries>{items}</TransitionSeries>
+    </AbsoluteFill>
+  );
+};

@@ -275,9 +275,9 @@ just logs
 just logs corp
 ```
 
-## Make the video
+## Make the launch video
 
-Render the 2-minute video to `video/out/hushgate.mp4` (needs Node):
+Render the launch video (about 1.5 minutes) to `video/out/hushgate.mp4` (needs Node):
 
 ```sh
 just video
