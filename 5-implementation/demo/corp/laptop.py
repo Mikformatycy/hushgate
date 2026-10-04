@@ -30,6 +30,16 @@ def claude(task):
         print(f"BLOCKED {e.status_code}: {e.body['error']['message']}")
 
 
+def openrouter(task):
+    title(f"Agent on OpenRouter (OpenAI-compatible Chat Completions, default URL), task: {task!r}")
+    import agent_openai
+
+    try:
+        agent_openai.main(task, base_url="https://openrouter.ai/api/v1")
+    except openai.APIStatusError as e:
+        print(f"BLOCKED {e.status_code}: {e.message}")
+
+
 def vps():
     title("Self-hosted model on a VPS: https://llm.sketchy-vps.example/v1/chat/completions")
     client = openai.OpenAI(base_url="https://llm.sketchy-vps.example/v1", api_key="none", max_retries=0)
@@ -59,6 +69,8 @@ if __name__ == "__main__":
         web()
     elif cmd == "claude":
         claude(task)
+    elif cmd == "openrouter":
+        openrouter(task)
     elif cmd == "vps":
         vps()
     elif cmd == "direct":

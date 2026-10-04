@@ -56,11 +56,13 @@ budgets:
 models:
   allow:
     - claude-*
+    - "*/claude-*" # OpenRouter-style ids, e.g. anthropic/claude-haiku-4.5
 
 # LLM providers registered devices may reach in company network mode.
 llm_hosts:
   approved:
     - api.anthropic.com
+    - openrouter.ai # OpenAI-compatible: Chat Completions are inspected like Anthropic Messages
 
 # Known attack patterns, checked against every tool call (see signatures.yaml).
 # A later feed overrides an earlier one per signature id.
