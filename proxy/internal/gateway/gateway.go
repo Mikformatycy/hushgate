@@ -250,24 +250,35 @@ func (g *Gateway) queueToolResults(agent string, body []byte) {
 			}
 		}
 	}
-	last := req.Messages[len(req.Messages)-1]
-	var blocks []block
-	if last.Role != "user" || json.Unmarshal(last.Content, &blocks) != nil {
-		return
+	// New tool results are in the user messages after the model's last turn.
+	// Don't assume they are the very last message: harnesses such as Claude
+	// Code append mid-conversation system messages after them.
+	start := 0
+	for i := len(req.Messages) - 1; i >= 0; i-- {
+		if req.Messages[i].Role == "assistant" {
+			start = i + 1
+			break
+		}
 	}
-	for _, b := range blocks {
-		if b.Type != "tool_result" {
+	for _, m := range req.Messages[start:] {
+		var blocks []block
+		if m.Role != "user" || json.Unmarshal(m.Content, &blocks) != nil {
 			continue
 		}
-		text := blockText(b.Content)
-		if len(strings.TrimSpace(text)) < 20 {
-			continue
+		for _, b := range blocks {
+			if b.Type != "tool_result" {
+				continue
+			}
+			text := blockText(b.Content)
+			if len(strings.TrimSpace(text)) < 20 {
+				continue
+			}
+			src, ok := calls[b.ToolUseID]
+			if !ok {
+				src = "tool result"
+			}
+			g.Scans.Observe(agent, src, text)
 		}
-		src, ok := calls[b.ToolUseID]
-		if !ok {
-			src = "tool result"
-		}
-		g.Scans.Observe(agent, src, text)
 	}
 }
 
