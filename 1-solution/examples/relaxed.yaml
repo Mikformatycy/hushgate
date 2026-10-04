@@ -1,0 +1,60 @@
+# HushGate policy, RELAXED profile: an R&D sandbox with no production or client data.
+# Credentials are still masked and still never leave, but new tools work right
+# away and confident AI suggestions apply on their own. Copy over hushgate.yaml to use.
+
+tools:
+  default: network # unknown tools run; protected data in them is still checked
+  rules:
+    Read: local
+    Write: local
+    Edit: local
+    Glob: local
+    Grep: local
+    Bash: local
+    TodoWrite: local
+    WebFetch: network
+    WebSearch: network
+
+masking:
+  mask_from: C3 # only credentials are masked
+  on_network_tool:
+    C2: allow
+    C3: block # dropped, but the agent keeps running
+
+vault:
+  env_files:
+    - /vault/.env
+  overrides: {}
+
+budgets:
+  default_tokens: 2000000
+  agents: {}
+
+models:
+  allow: [] # any model
+
+llm_hosts:
+  approved:
+    - api.anthropic.com
+
+signatures:
+  feeds:
+    - /etc/hushgate/signatures.yaml
+  refresh_seconds: 300
+  disabled: [HG-DESER-001, HG-DESER-003] # pickle and YAML loads are common in research code
+
+bash_guard:
+  tools: [Bash]
+
+injection:
+  alert_threshold: 0.9
+
+review:
+  auto_accept:
+    enabled: true
+    min_probability: 0.9
+    min_confidence: 0.85
+    tools: [network, deny] # never "local" automatically
+    variables: [C1, C2, C3]
+
+nodes: []

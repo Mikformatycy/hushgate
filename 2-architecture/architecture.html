@@ -1,0 +1,108 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--gs:#7297C5;--deep:#3F6699;--tint:#EAF0F8;--ink:#0C1A2B;--sub:#5C6B7E;--line:#C9D3E0;--bad:#D5443B;--ok:#2E9B6B;--ai:#7B5CC4;}
+body{margin:0;background:#fff;font-family:Manrope,Helvetica,Arial,sans-serif;color:var(--ink)}
+#c{position:relative;width:1800px;height:900px}
+.g{position:absolute;border:1.5px solid var(--line);border-radius:18px;background:#F7F9FC}
+.g>.t{position:absolute;left:18px;top:12px;font-size:15px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--sub)}
+.gate{border:2.5px solid var(--gs);background:#F4F8FD}
+.gate>.t{color:var(--deep)}
+.n{position:absolute;box-sizing:border-box;border:1.5px solid var(--line);border-radius:12px;background:#fff;padding:10px 14px;display:flex;flex-direction:column;justify-content:center}
+.n b{font-size:17px;font-weight:800}
+.n span{font-size:13.5px;color:var(--sub);margin-top:3px;line-height:1.3}
+.n.k{border-color:var(--gs);background:var(--tint)}
+.n.ai{border-color:var(--ai);background:#F0EBFA}
+.n.x{border-color:var(--bad);background:#FBEAE8}
+.lab{position:absolute;font-size:13px;font-weight:700;color:var(--sub);background:#fff;padding:1px 6px;border-radius:6px;white-space:nowrap}
+.row{position:absolute;font-size:13px;font-weight:800;color:var(--deep);letter-spacing:.05em;text-transform:uppercase}
+svg{position:absolute;inset:0}
+</style></head><body><div id="c">
+<!-- groups -->
+<div class="g" style="left:400px;top:24px;width:480px;height:132px"><div class="t">Security team</div></div>
+<div class="g gate" style="left:400px;top:190px;width:1010px;height:480px"><div class="t">HushGate gate · single Go binary</div></div>
+<div class="g" style="left:30px;top:250px;width:320px;height:420px"><div class="t">AI agents</div></div>
+<div class="g" style="left:400px;top:705px;width:1370px;height:170px"><div class="t">State and outputs</div></div>
+
+<!-- security team -->
+<div class="n" style="left:425px;top:66px;width:205px;height:68px"><b>Dashboard</b><span>alerts, review, audit export</span></div>
+<div class="n" style="left:650px;top:66px;width:205px;height:68px"><b>Prometheus</b><span>latency, decisions, tokens</span></div>
+<!-- AI advisor -->
+<div class="n ai" style="left:1480px;top:52px;width:290px;height:92px"><b>AI advisor</b><span>TypeSafe Jev classifier · off the request path</span></div>
+
+<!-- agents -->
+<div class="n" style="left:55px;top:296px;width:270px;height:72px"><b>Claude Code · Agent SDK</b><span>ANTHROPIC_BASE_URL → gate</span></div>
+<div class="n" style="left:55px;top:398px;width:270px;height:72px"><b>CI runners, servers</b><span>ANTHROPIC_BASE_URL → gate</span></div>
+<div class="n" style="left:55px;top:548px;width:270px;height:72px"><b>Employee laptops</b><span>proxy + company CA via MDM</span></div>
+<div class="n x" style="left:55px;top:760px;width:270px;height:64px"><b>Internet (direct)</b><span>no route: egress is default-deny</span></div>
+
+<!-- gate internals -->
+<div class="row" style="left:672px;top:268px">Request</div>
+<div class="row" style="left:672px;top:418px">Response</div>
+<div class="n k" style="left:425px;top:296px;width:210px;height:84px"><b>Gateway :8080</b><span>Anthropic Messages API, streaming</span></div>
+<div class="n k" style="left:425px;top:548px;width:210px;height:96px"><b>Forward proxy :3128</b><span>TLS inspection, device allowlist, shadow-AI detection</span></div>
+<div class="n" style="left:670px;top:296px;width:160px;height:84px"><b>Budget</b><span>kill switch, tokens per agent</span></div>
+<div class="n" style="left:850px;top:296px;width:160px;height:84px"><b>Model</b><span>allowlist</span></div>
+<div class="n k" style="left:1030px;top:296px;width:200px;height:84px"><b>Vault</b><span>mask secrets and PII (C0–C3, checksums)</span></div>
+<div class="n" style="left:1180px;top:446px;width:205px;height:84px"><b>Hold tool call</b><span>until the block is complete</span></div>
+<div class="n k" style="left:920px;top:446px;width:240px;height:84px"><b>Policy · Bash guard</b><span>19 attack signatures</span></div>
+<div class="n" style="left:670px;top:446px;width:230px;height:84px"><b>Decide</b><span>restore into local tool · block · kill</span></div>
+<div class="n" style="left:1105px;top:208px;width:285px;height:62px"><b>Admin API :8081</b><span>roles: admin · advisor · metrics</span></div>
+
+<!-- provider -->
+<div class="n k" style="left:1480px;top:330px;width:290px;height:140px"><b>Approved LLM provider</b><span>receives placeholders only, never real secrets or personal data</span></div>
+
+<!-- state -->
+<div class="n" style="left:425px;top:752px;width:235px;height:84px"><b>hushgate.yaml</b><span>one live policy · reload ≤ 1 s</span></div>
+<div class="n" style="left:680px;top:752px;width:235px;height:84px"><b>Signature feed</b><span>file or URL · last good copy</span></div>
+<div class="n" style="left:935px;top:752px;width:235px;height:84px"><b>Redis</b><span>budgets and kill state</span></div>
+<div class="n" style="left:1190px;top:752px;width:235px;height:84px"><b>audit.jsonl</b><span>every decision and its reason</span></div>
+<div class="n" style="left:1500px;top:752px;width:250px;height:84px"><b>SIEM / log shipper</b><span>CSV and JSON export</span></div>
+
+<svg width="1800" height="900">
+<defs>
+ <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#5C6B7E"/></marker>
+ <marker id="ab" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#3F6699"/></marker>
+ <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#D5443B"/></marker>
+ <marker id="av" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7B5CC4"/></marker>
+</defs>
+<g fill="none" stroke-width="2.2">
+ <!-- agents to gate -->
+ <path d="M325 332 H425" stroke="#5C6B7E" marker-end="url(#a)" marker-start="url(#a)"/>
+ <path d="M325 434 C375 434 380 362 425 362" stroke="#5C6B7E" marker-end="url(#a)" marker-start="url(#a)"/>
+ <path d="M325 584 H425" stroke="#5C6B7E" marker-end="url(#a)" marker-start="url(#a)"/>
+ <path d="M530 548 V380" stroke="#3F6699" marker-end="url(#ab)"/>
+ <!-- request row -->
+ <path d="M635 338 H670" stroke="#3F6699" marker-end="url(#ab)"/>
+ <path d="M830 338 H850" stroke="#3F6699" marker-end="url(#ab)"/>
+ <path d="M1010 338 H1030" stroke="#3F6699" marker-end="url(#ab)"/>
+ <path d="M1230 338 C1350 338 1380 372 1480 372" stroke="#3F6699" marker-end="url(#ab)"/>
+ <!-- response row -->
+ <path d="M1480 430 C1440 430 1430 488 1385 488" stroke="#3F6699" marker-end="url(#ab)"/>
+ <path d="M1180 488 H1160" stroke="#3F6699" marker-end="url(#ab)"/>
+ <path d="M920 488 H900" stroke="#3F6699" marker-end="url(#ab)"/>
+ <path d="M670 488 C620 488 600 430 600 380" stroke="#3F6699" marker-end="url(#ab)"/>
+ <!-- blocked internet -->
+ <path d="M190 670 V760" stroke="#D5443B" stroke-dasharray="7 6" marker-end="url(#ar)"/>
+ <!-- admin api to team -->
+ <path d="M1150 208 C1150 170 760 190 755 134" stroke="#5C6B7E" marker-end="url(#a)"/>
+ <path d="M1130 208 C1120 160 540 200 528 134" stroke="#5C6B7E" marker-end="url(#a)"/>
+ <!-- AI advisor -->
+ <path d="M1480 110 C1430 110 1420 238 1390 238" stroke="#7B5CC4" stroke-dasharray="7 6" marker-end="url(#av)" marker-start="url(#av)"/>
+ <!-- state -->
+ <path d="M542 752 V670" stroke="#5C6B7E" marker-end="url(#a)"/>
+ <path d="M797 752 V670" stroke="#5C6B7E" marker-end="url(#a)"/>
+ <path d="M1052 752 V670" stroke="#5C6B7E" marker-end="url(#a)" marker-start="url(#a)"/>
+ <path d="M1307 670 V752" stroke="#5C6B7E" marker-end="url(#a)"/>
+ <path d="M1425 794 H1500" stroke="#5C6B7E" marker-end="url(#a)"/>
+</g>
+</svg>
+<!-- labels on arrows -->
+<div class="lab" style="left:1250px;top:300px;color:#3F6699">placeholders only</div>
+<div class="lab" style="left:1395px;top:462px;color:#3F6699">streamed answer</div>
+<div class="lab" style="left:540px;top:458px;color:#3F6699">LLM traffic</div>
+<div class="lab" style="left:200px;top:700px;color:#D5443B">✕ blocked</div>
+<div class="lab" style="left:1250px;top:150px;color:#7B5CC4">suggestions and alerts only · never secret values</div>
+<div class="lab" style="left:552px;top:690px">reload</div>
+<div class="lab" style="left:807px;top:690px">pull</div>
+</div></body></html>

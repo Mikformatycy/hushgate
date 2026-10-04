@@ -1,8 +1,8 @@
 .env
-!demo/workspace/.env
+!5-implementation/demo/workspace/.env
 .DS_Store
-/proxy/bin/
+/5-implementation/proxy/bin/
 node_modules/
 dist/
-demo/workspace/cfg.txt
+5-implementation/demo/workspace/cfg.txt
 __pycache__/
