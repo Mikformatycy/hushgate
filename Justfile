@@ -226,6 +226,16 @@ logs stack="gateway":
 tests:
     docker run --rm -v "$PWD":/src -w /src/{{ impl }}/proxy golang:1.26-alpine go test ./...
 
+# End-to-end checks against the running company network demo (corp-up first)
+[group('tests')]
+e2e:
+    python3 4-testing/e2e.py
+
+# Microbenchmarks of every enforcement step (needs Go 1.26)
+[group('tests')]
+bench:
+    cd {{ impl }}/proxy && go test ./internal/bench ./internal/gateway -run '^$' -bench . -benchmem
+
 # Test suite with the race detector (needs Go 1.26)
 [group('tests')]
 tests-local:
