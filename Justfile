@@ -151,6 +151,18 @@ gw-reset:
 claude-code:
     cd demo/workspace && ANTHROPIC_BASE_URL=http://localhost:8080 ANTHROPIC_CUSTOM_HEADERS="X-Agent-Id: my-claude-code" claude
 
+# Real Claude Code inside the sandbox: the gate is its only way out (gateway-up first)
+[group('gateway')]
+claude-sandbox:
+    {{ gw }} exec claude-code claude
+
+# Show that the sandboxed Claude Code can't reach the internet except through the gate
+[group('gateway')]
+claude-sandbox-check:
+    @{{ gw }} exec -T claude-code curl -s -m 5 https://example.com -o /dev/null && echo "direct internet: REACHED" || echo "direct internet: blocked"
+    @{{ gw }} exec -T claude-code curl -s -m 5 http://1.1.1.1 -o /dev/null && echo "raw IP: REACHED" || echo "raw IP: blocked"
+    @{{ gw }} exec -T claude-code curl -s -m 5 http://proxy:8080/healthz > /dev/null && echo "HushGate gateway: reachable" || echo "HushGate gateway: NOT reachable"
+
 # --- Policy (reloads live on save) --------------------------------------------
 
 # Edit the policy file; changes apply within a second

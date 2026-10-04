@@ -76,6 +76,24 @@ services:
     networks: [sandbox]
     depends_on: [proxy]
 
+  # Real Claude Code, sandboxed: only on the internal network, so every request
+  # goes through the gateway and nothing can go around it. Login: put a token
+  # from `claude setup-token` in .env as CLAUDE_CODE_OAUTH_TOKEN.
+  # Start a session: just claude-sandbox
+  claude-code:
+    build: ./sandbox/claude-code
+    environment:
+      ANTHROPIC_BASE_URL: http://proxy:8080
+      ANTHROPIC_CUSTOM_HEADERS: "X-Agent-Id: claude-code-sandbox"
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+      DISABLE_AUTOUPDATER: "1"
+    volumes:
+      - ./demo/workspace:/workspace
+      - claude-home:/home/node/.claude
+    networks: [sandbox]
+    depends_on: [proxy]
+
 networks:
   sandbox:
     internal: true
@@ -85,3 +103,4 @@ networks:
 
 volumes:
   audit:
+  claude-home:
