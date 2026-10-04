@@ -1,65 +1,79 @@
 <!doctype html><html><head><meta charset="utf-8">
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=JetBrains+Mono:wght@600&display=swap" rel="stylesheet">
 <style>
-:root{--navy:#0C1A2B;--navy2:#13243A;--line:#29405C;--gs:#7297C5;--deep:#3F6699;--text:#F3F5F8;--sub:#B9C6D6;--mute:#8E9BAD;--bad:#E8706A}
+:root{--bg:#111B27;--text:#E6EAF0;--sub:#8C98A8;--brick:#283850;--red:#CF5F57;--redt:#F0A39D;--blue:#7297C5;--bluet:#CAD9EC}
 *{box-sizing:border-box}
 body{margin:0;font-family:Manrope,Helvetica,Arial,sans-serif;color:var(--text)}
-#c{position:relative;width:1920px;height:1080px;overflow:hidden;background:
-  radial-gradient(900px 700px at 1480px 520px, rgba(114,151,197,.20), transparent 70%),
-  radial-gradient(rgba(147,166,190,.10) 1.2px, transparent 1.4px) 0 0/28px 28px,
-  var(--navy)}
+#c{position:relative;width:1600px;height:1600px;overflow:hidden;background:var(--bg)}
 .abs{position:absolute}
-.lock{left:128px;top:212px;display:flex;align-items:center;gap:40px}
-.lock svg{width:170px;height:191px;filter:drop-shadow(0 18px 40px rgba(114,151,197,.35))}
-.word{font-size:150px;font-weight:800;letter-spacing:-5px;line-height:1}
-.word span{color:var(--gs)}
-.kicker{left:132px;top:150px;font-size:24px;font-weight:700;letter-spacing:5px;text-transform:uppercase;color:var(--gs)}
-.tag{left:128px;top:500px;font-size:62px;font-weight:800;line-height:1.12;letter-spacing:-1.5px;width:900px}
-.tag span{color:var(--gs)}
-.pills{left:128px;top:705px;display:flex;flex-wrap:wrap;gap:16px;width:880px}
-.pill{font-size:24px;font-weight:700;color:var(--sub);border:2px solid var(--line);background:rgba(19,36,58,.7);border-radius:999px;padding:10px 22px}
-.foot{left:128px;bottom:88px;font-size:24px;color:var(--mute);font-weight:600}
-.card{left:1090px;width:700px;background:var(--navy2);border:2px solid var(--line);border-radius:24px;padding:26px 32px 30px;box-shadow:0 30px 80px rgba(0,0,0,.35)}
-.card .h{display:flex;justify-content:space-between;font-size:20px;font-weight:700;color:var(--mute);letter-spacing:2px;text-transform:uppercase;margin-bottom:18px}
-.row{display:flex;align-items:center;gap:14px;height:62px;font-family:'JetBrains Mono',monospace;font-size:24px;color:var(--sub)}
-.chip{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:21px;border-radius:999px;padding:7px 14px;white-space:nowrap}
-.raw{color:#fff;background:rgba(213,68,59,.85);border:2px solid #D5443B}
-.ph{color:#DCE7F5;background:rgba(114,151,197,.22);border:2px solid var(--gs)}
-.gate{left:1376px;top:438px;width:128px;height:144px}
-.line{width:3px;left:1439px;background:linear-gradient(var(--line),var(--gs))}
-.badge{font-size:20px;font-weight:700;color:var(--gs);letter-spacing:2px;text-transform:uppercase}
+.lock{left:110px;top:110px;display:flex;align-items:center;gap:26px}
+.lock svg{width:86px;height:97px}
+.word{font-size:92px;font-weight:800;letter-spacing:-3px;line-height:1}
+.word span{color:var(--blue)}
+.tag{left:110px;top:262px;font-size:48px;font-weight:700;line-height:1.2;letter-spacing:-.8px}
+.tag span{color:var(--sub)}
+.col{top:478px;font-size:22px;font-weight:700;letter-spacing:4px;text-transform:uppercase;color:var(--sub)}
+.sec{left:110px;font-size:20px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--sub)}
+.wall{left:725px;width:150px;top:540px;height:650px;overflow:hidden}
+.brick{position:absolute;height:24px;background:var(--brick);border-radius:3px}
+.row{position:absolute;left:110px;width:1380px;height:50px;display:flex;align-items:center}
+.side{width:615px;display:flex;align-items:center;height:100%}
+.slot{width:150px;height:3px}
+.ln{flex:1;height:3px;position:relative}
+.chip{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:23px;border-radius:999px;padding:9px 18px;white-space:nowrap;border:2px solid}
+.r{color:var(--redt);border-color:var(--red);background:rgba(207,95,87,.12)}
+.b{color:var(--bluet);border-color:var(--blue);background:rgba(114,151,197,.12)}
+.lr{background:var(--red)} .lb{background:var(--blue)}
+.ar::after,.al::before{content:"";position:absolute;top:-8px;border:9.5px solid transparent}
+.ar::after{right:6px;border-left:14px solid var(--blue);border-right:0}
+.al::before{left:6px;border-right:14px solid var(--red);border-left:0}
+.ln.lr.al,.ln.lb.ar{margin:0}
+.side.l .chip{margin-right:0}
+.gap-l{margin-right:18px}.gap-r{margin-left:18px}
+.legend{left:110px;top:1290px;display:flex;gap:40px;font-size:24px;font-weight:600;color:var(--sub)}
+.legend i{display:inline-block;width:16px;height:16px;border-radius:50%;margin-right:12px;vertical-align:-1px}
+.foot{left:110px;top:1458px;font-size:24px;color:var(--sub);font-weight:600}
 </style></head><body><div id="c">
-<div class="abs kicker">AI control layer for coding agents</div>
 <div class="abs lock">
   <svg viewBox="0 0 64 72"><defs><linearGradient id="g" x1="0" y1="0" x2="0.35" y2="1"><stop offset="0" stop-color="#9BB9E0"/><stop offset="1" stop-color="#5C84B8"/></linearGradient></defs>
   <path d="M32 3 L58 12 V34 C58 52 46.5 64 32 69.5 C17.5 64 6 52 6 34 V12 Z" fill="url(#g)"/>
-  <rect x="15" y="29" width="34" height="13" rx="6.5" fill="#fff"/><circle cx="24" cy="35.5" r="2.6" fill="#0C1A2B"/><circle cx="32" cy="35.5" r="2.6" fill="#0C1A2B"/><circle cx="40" cy="35.5" r="2.6" fill="#0C1A2B"/></svg>
+  <rect x="15" y="29" width="34" height="13" rx="6.5" fill="#fff"/><circle cx="24" cy="35.5" r="2.6" fill="#111B27"/><circle cx="32" cy="35.5" r="2.6" fill="#111B27"/><circle cx="40" cy="35.5" r="2.6" fill="#111B27"/></svg>
   <div class="word">Hush<span>Gate</span></div>
 </div>
 <div class="abs tag">Agents use your secrets.<br><span>The model never sees them.</span></div>
-<div class="abs pills">
-  <div class="pill">Secrets &amp; client data masked</div>
-  <div class="pill">Tool calls policed</div>
-  <div class="pill">Spend capped</div>
-  <div class="pill">Every action on record</div>
-</div>
-<div class="abs foot">HackYeah 2026 · Team Mikformatyka · github.com/Mikformatycy/hushgate</div>
 
-<div class="abs card" style="top:150px">
-  <div class="h"><span>What the agent sends</span><span style="color:#E8706A">plain text</span></div>
-  <div class="row">DB_PASSWORD= <span class="chip raw">Pr0d-Adm1n-2026</span></div>
-  <div class="row">IBAN&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="chip raw">PL61 1090 1014 0000 0712 1981 2874</span></div>
-  <div class="row">PESEL&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="chip raw">44051401359</span></div>
+<div class="abs col" style="left:110px">Your agent</div>
+<div class="abs col" style="left:725px;width:150px;text-align:center">Proxy</div>
+<div class="abs col" style="right:110px;text-align:right">The model</div>
+<div class="abs wall" id="wall"></div>
+<div class="abs sec" style="top:566px">Request →</div>
+<div class="abs sec" style="top:926px">← Response</div>
+<div id="rows"></div>
+
+<div class="abs legend"><span><i style="background:var(--red)"></i>Real value</span><span><i style="background:var(--blue)"></i>Placeholder</span></div>
+<div class="abs foot">HackYeah 2026 · Team Mikformatyka · github.com/Mikformatycy/hushgate</div>
 </div>
-<div class="abs line" style="top:418px;height:24px"></div>
-<svg class="abs gate" viewBox="0 0 64 72" style="filter:drop-shadow(0 0 28px rgba(114,151,197,.55))"><defs><linearGradient id="g2" x1="0" y1="0" x2="0.35" y2="1"><stop offset="0" stop-color="#9BB9E0"/><stop offset="1" stop-color="#5C84B8"/></linearGradient></defs>
-  <path d="M32 3 L58 12 V34 C58 52 46.5 64 32 69.5 C17.5 64 6 52 6 34 V12 Z" fill="url(#g2)"/>
-  <rect x="15" y="29" width="34" height="13" rx="6.5" fill="#fff"/><circle cx="24" cy="35.5" r="2.6" fill="#0C1A2B"/><circle cx="32" cy="35.5" r="2.6" fill="#0C1A2B"/><circle cx="40" cy="35.5" r="2.6" fill="#0C1A2B"/></svg>
-<div class="abs line" style="top:586px;height:24px"></div>
-<div class="abs card" style="top:614px">
-  <div class="h"><span>What the model sees</span><span style="color:#7297C5">placeholders</span></div>
-  <div class="row">DB_PASSWORD= <span class="chip ph">{{VAULT_ENV_DB_PASSWORD}}</span></div>
-  <div class="row">IBAN&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="chip ph">{{VAULT_IBAN_7F3A91C2}}</span></div>
-  <div class="row">PESEL&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="chip ph">{{VAULT_PESEL_9F2C41A0}}</span></div>
-</div>
-</div></body></html>
+<script>
+const WALL_TOP=540, rows=[
+  {y:655, dir:'out', real:'Pr0d-Adm1n-2026', ph:'{{VAULT_ENV_DB_PASSWORD}}'},
+  {y:745, dir:'out', real:'PL61 1090 1014 0000 0712 1981 2874', ph:'{{VAULT_IBAN_7F3A91C2}}'},
+  {y:835, dir:'out', real:'44051401359', ph:'{{VAULT_PESEL_9F2C41A0}}'},
+  {y:1015,dir:'in',  real:'Pr0d-Adm1n-2026', ph:'{{VAULT_ENV_DB_PASSWORD}}'},
+  {y:1105,dir:'in',  real:'44051401359', ph:'{{VAULT_PESEL_9F2C41A0}}'},
+];
+const R=document.getElementById('rows');
+for(const r of rows){
+  const out=r.dir==='out';
+  R.insertAdjacentHTML('beforeend',`<div class="row" style="top:${r.y-25}px">
+    <div class="side l"><span class="chip r gap-l">${r.real}</span><div class="ln lr ${out?'':'al'}"></div></div>
+    <div class="slot" style="background:linear-gradient(90deg,var(--red),var(--blue))"></div>
+    <div class="side"><div class="ln lb ${out?'ar':''}"></div><span class="chip b gap-r">${r.ph}</span></div></div>`);
+}
+// a solid brick wall with a thin slit where each row passes through
+const W=document.getElementById('wall'), H=650, PITCH=30, BW=64;
+for(let y=0,i=0;y<H;y+=PITCH,i++)
+  for(let x=(i%2?-BW/2:0)-3;x<150;x+=BW+6)
+    W.insertAdjacentHTML('beforeend',`<div class="brick" style="top:${y}px;left:${x}px;width:${BW}px"></div>`);
+for(const r of rows)
+  W.insertAdjacentHTML('beforeend',`<div style="position:absolute;left:0;right:0;top:${r.y-WALL_TOP-8}px;height:16px;background:var(--bg)"></div>`);
+</script></body></html>

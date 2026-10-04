@@ -1,6 +1,6 @@
 # HushGate
 
-![HushGate: agents use your secrets, the model never sees them](assets/cover.png)
+<p align="center"><img src="assets/cover.png" alt="HushGate: agents use your secrets, the model never sees them" width="560"></p>
 
 **An AI control layer for agents.** HushGate sits between every AI agent and every model provider. It keeps secrets and personal data away from the model, stops agents from taking actions they shouldn't, catches unapproved AI use and caps spend. Every decision is recorded with the rule that made it.
 
